@@ -1,0 +1,23 @@
+package "station-app"
+version "1.0"
+versiontext "Copyright (C) 2024 by Ivan Podmazov"
+
+usage "
+station-app [app options...] PLUGIN_FILE [-- [plugin options...]]
+station-app --help"
+
+args "--conf-parser --default-optional --no-help --no-version --unnamed-opts=PLUGIN_FILE"
+
+
+option "help" h "Display usage help for app or plugin"
+option "verbose" v "Display more information"
+
+option "argfile" a "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
+
+option "threads" j "Number of parallel processing threads" int typestr="THREADS"
+
+option "no-window" n "Do not create SDL window"
+option "window-title" t "SDL window title" string
+option "window-width"  x "SDL window width"  int typestr="PIXELS"
+option "window-height" y "SDL window height" int typestr="PIXELS"
+
