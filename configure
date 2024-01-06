@@ -14,9 +14,6 @@ IDIR="include"
 SDIR="src"
 ODIR="build"
 
-: ${INSTALL_IDIR:="${PROJECT_DIR}/${IDIR}"}
-: ${INSTALL_LDIR:="${PROJECT_DIR}/${ODIR}"}
-
 FILE_LIBRARY="library"
 FILE_APPLICATION="application"
 FILE_APPLICATION_GGO="application.ggo"
@@ -39,9 +36,10 @@ NINJA="build.ninja"
 ###############################################################################
 
 usage () { echo "usage:"; grep '^\s*[^*]) # ' "$0" | sed -E 's,(.)\) # ,-\1  ,'; exit 0; }
+optlist () { grep '^\s*[^*]) # ' "$0" | sed -E 's,^\s*(.)\) # .*,\1,' | tr -d '\n'; }
 
 [ "$#" = 0 ] && usage
-while getopts ":sadpoSY" arg
+while getopts ":$(optlist)" arg
 do
     case "$arg" in
         s) # output: build shared library (.so) instead of static (.a)
@@ -68,11 +66,11 @@ do
             ;;
 
         S) # feature: enable support for SDL
-            DEFINE_IS_SDL_SUPPORTED="true"
+            FEATURE_IS_SDL_SUPPORTED="true"
             ;;
 
         Y) # feature: enable thread yielding
-            DEFINE_IS_THREAD_YIELD_ENABLED="true"
+            FEATURE_IS_THREAD_YIELD_ENABLED="true"
             ;;
 
         *) # display help
@@ -86,7 +84,10 @@ done
 # Set flags
 ###############################################################################
 
-if [ "${DEFINE_IS_SDL_SUPPORTED:-}" ]
+: ${INSTALL_IFLAGS:="-I${PROJECT_DIR}/${IDIR}"}
+: ${INSTALL_LDIR:="${PROJECT_DIR}/${ODIR}"}
+
+if [ "${FEATURE_IS_SDL_SUPPORTED:-}" ]
 then
     CFLAGS_SDL="$(pkg-config --cflags sdl2)"
     LFLAGS_SDL="$(pkg-config --libs sdl2)"
@@ -108,11 +109,12 @@ esac
 CFLAGS="-march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors \
 -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition \
 -I${PROJECT_DIR}/${IDIR} \
-$CFLAGS_COMMON $CFLAGS_BUILD_TYPE"
+$CFLAGS_COMMON \
+$CFLAGS_BUILD_TYPE"
 
 CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
-${DEFINE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
-${DEFINE_IS_THREAD_YIELD_ENABLED:+"-DSTATION_IS_THREAD_YIELD_ENABLED"}"
+${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
+${FEATURE_IS_THREAD_YIELD_ENABLED:+"-DSTATION_IS_THREAD_YIELD_ENABLED"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR}"
 
 LFLAGS="$LFLAGS_COMMON"
@@ -125,7 +127,7 @@ cat <<  _EOF_ > "${PROJECT_DIR}/${PKG_CONF}"
 Name: ${PROJECT_NAME}
 Description: ${PROJECT_DESCRIPTION}
 Version: ${PROJECT_VERSION}
-Cflags: $CFLAGS_COMMON -I${INSTALL_IDIR}
+Cflags: $CFLAGS_COMMON $INSTALL_IFLAGS
 _EOF_
 
 if [ "${OUTPUT_LIBRARY_SHARED:-}" ]
