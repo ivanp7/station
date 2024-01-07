@@ -28,15 +28,17 @@
 
 #include <station/index.typ.h>
 
+struct station_state;
 struct station_context;
 
 /**
  * @brief State function of a finite state machine.
  *
- * @return Index of the next state or the terminator value.
+ * State function is supposed to modify 'state' argument, setting it to the next FSM state.
+ * If the next state function is NULL, then FSM execution is terminated.
  */
-typedef station_state_idx_t (*station_sfunc_t)(
-        void *state_data, ///< [in] Current state data.
+typedef void (*station_sfunc_t)(
+        struct station_state *state, ///< [in,out] Current state.
         struct station_context *context ///< [in] Finite state machine context.
 );
 
@@ -44,7 +46,7 @@ typedef station_state_idx_t (*station_sfunc_t)(
  * @brief Parallel processing function of a finite state machine.
  */
 typedef void (*station_pfunc_t)(
-        void *data, ///< [in] Processed data.
+        void *data, ///< [in,out] Processed data.
         station_task_idx_t task_idx,    ///< [in] Index of the current task.
         station_thread_idx_t thread_idx ///< [in] Index of the current thread.
 );

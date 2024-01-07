@@ -22,13 +22,11 @@
  * @brief Library implementation.
  */
 
-#include <station/state.fun.h>
 #include <station/op.fun.h>
 #include <station/fsm.fun.h>
 
 #include <station/state.typ.h>
 #include <station/sdl.typ.h>
-#include <station/index.def.h>
 
 #include <threads.h>
 #include <stdatomic.h>
@@ -48,8 +46,6 @@
 #endif
 
 struct station_context {
-    station_state_t *current_state;
-
     station_pfunc_t pfunc;
     void *pfunc_data;
 
@@ -70,35 +66,22 @@ struct station_context {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// state.fun.h
-///////////////////////////////////////////////////////////////////////////////
-
-station_state_t*
-station_alloc_state(
-        station_states_number_t num_next_states)
-{
-    return malloc(offsetof(station_state_t, next_state) +
-            sizeof(((station_state_t*)NULL)->next_state[0]) * num_next_states);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // op.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
 void
 station_execute_pfunc(
         station_pfunc_t pfunc,
-        void *data,
+        void *pfunc_data,
 
         station_tasks_number_t num_tasks,
         station_tasks_number_t batch_size,
 
         struct station_context *context)
 {
-    assert(pfunc != NULL);
     assert(context != NULL);
 
-    if (num_tasks == 0)
+    if ((pfunc == NULL) || (num_tasks == 0))
         return;
 
     const station_threads_number_t num_threads = context->num_threads;
@@ -109,7 +92,7 @@ station_execute_pfunc(
             batch_size = (num_tasks - 1) / num_threads + 1;
 
         context->pfunc = pfunc;
-        context->pfunc_data = data;
+        context->pfunc_data = pfunc_data;
         context->num_tasks = num_tasks;
         context->batch_size = batch_size;
 
@@ -134,7 +117,7 @@ station_execute_pfunc(
     else
     {
         for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
-            pfunc(data, task_idx, 0);
+            pfunc(pfunc_data, task_idx, 0);
     }
 }
 
@@ -286,16 +269,13 @@ station_finite_state_machine_thread(
 
 uint8_t
 station_finite_state_machine(
-        station_state_t *initial_state,
+        station_state_t state,
         station_threads_number_t num_threads)
 {
-    assert(initial_state != NULL);
-
     uint8_t result = 0;
 
     // Initialize context
     struct station_context context = {
-        .current_state = initial_state,
         .num_threads = num_threads,
     };
     atomic_init(&context.done_tasks, 0);
@@ -346,22 +326,9 @@ station_finite_state_machine(
         threads[thread_idx] = thread;
     }
 
-    // Iterate until there is no next state
-    for (;;)
-    {
-        // Switch to next task
-        assert(context.current_state != NULL);
-        assert(context.current_state->sfunc != NULL);
-
-        // Execute sequential step
-        station_state_idx_t next_state_idx =
-            context.current_state->sfunc(context.current_state->state_data, &context);
-
-        if (next_state_idx == STATION_TERMINATOR)
-            break;
-
-        context.current_state = context.current_state->next_state[next_state_idx];
-    }
+    // Execute finite state machine
+    while (state.sfunc != NULL)
+        state.sfunc(&state, &context);
 
 cleanup:
     // Wake slave threads and join
@@ -378,59 +345,52 @@ cleanup:
 
 uint8_t
 station_finite_state_machine_sdl(
-        struct station_state *initial_state,
+        station_state_t state,
         station_threads_number_t num_threads,
 
-        struct station_sdl_context *sdl_context,
-        uint32_t sdl_init_flags,
+        const station_sdl_properties_t *sdl_properties,
 
-        uint16_t texture_width,
-        uint16_t texture_height,
-
-        const char *window_title,
-        uint16_t window_width,
-        uint16_t window_height)
+        station_sdl_context_t *sdl_context)
 {
 #ifndef STATION_IS_SDL_SUPPORTED
-    (void) initial_state;
+    (void) state;
     (void) num_threads;
+    (void) sdl_properties;
     (void) sdl_context;
-    (void) sdl_init_flags;
-    (void) texture_width;
-    (void) texture_height;
-    (void) window_title;
-    (void) window_width;
-    (void) window_height;
     return -1;
 #else
-    assert(initial_state != NULL);
+    assert(sdl_properties != NULL);
     assert(sdl_context != NULL);
-    assert(texture_width > 0);
-    assert(texture_height > 0);
-    assert(window_title != NULL);
 
-    if (window_width == 0)
-        window_width = texture_width;
-    if (window_height == 0)
-        window_height = texture_height;
+    if ((sdl_properties->texture_width == 0) || (sdl_properties->texture_height == 0))
+        return 1;
 
     uint8_t result = 0;
 
     // Initialize SDL and resources
-    if (SDL_Init(SDL_INIT_VIDEO | sdl_init_flags) < 0)
-        return 1;
+    if (SDL_Init(SDL_INIT_VIDEO | sdl_properties->sdl_init_flags) < 0)
+        return 2;
 
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
     SDL_Texture *texture = NULL;
 
-    window = SDL_CreateWindow(window_title,
+    uint32_t window_flags = 0;
+
+    if (!sdl_properties->window_shown)
+        window_flags |= SDL_WINDOW_HIDDEN;
+
+    if (sdl_properties->window_resizable)
+        window_flags |= SDL_WINDOW_RESIZABLE;
+
+    window = SDL_CreateWindow(sdl_properties->window_title != NULL ? sdl_properties->window_title : "",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-            window_width, window_height,
-            SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+            sdl_properties->window_width != 0 ? sdl_properties->window_width : sdl_properties->texture_width,
+            sdl_properties->window_height != 0 ? sdl_properties->window_height : sdl_properties->texture_height,
+            window_flags);
     if (window == NULL)
     {
-        result = 2;
+        result = 3;
         goto cleanup;
     }
 
@@ -439,16 +399,16 @@ station_finite_state_machine_sdl(
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     if (renderer == NULL)
     {
-        result = 3;
+        result = 4;
         goto cleanup;
     }
 
     texture = SDL_CreateTexture(renderer,
             SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
-            texture_width, texture_height);
+            sdl_properties->texture_width, sdl_properties->texture_height);
     if (texture == NULL)
     {
-        result = 4;
+        result = 5;
         goto cleanup;
     }
 
@@ -461,14 +421,14 @@ station_finite_state_machine_sdl(
     sdl_context->texture_lock_pixels = NULL;
     sdl_context->texture_lock_pitch = 0;
 
-    sdl_context->texture_width = texture_width;
-    sdl_context->texture_height = texture_height;
+    sdl_context->texture_width = sdl_properties->texture_width;
+    sdl_context->texture_height = sdl_properties->texture_height;
 
     // Execute finite state machine
-    result = station_finite_state_machine(initial_state, num_threads);
+    result = station_finite_state_machine(state, num_threads);
 
     if (result != 0)
-        result += 4;
+        result += 5;
 
 cleanup:
     // Release resources and finalize SDL

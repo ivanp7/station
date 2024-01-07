@@ -15,8 +15,10 @@ option "verbose" v "Display more information"
 option "argfile" a "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
 
 option "threads" j "Number of parallel processing threads" int typestr="THREADS"
+option "no-sdl" n "Disable SDL support"
 
-option "no-window" n "Do not create SDL window"
+option "window-shown" w "Make SDL window shown upon creation"
+option "window-resizable" r "Make SDL window resizable"
 option "window-title" t "SDL window title" string
 option "window-width"  x "SDL window width"  int typestr="PIXELS"
 option "window-height" y "SDL window height" int typestr="PIXELS"

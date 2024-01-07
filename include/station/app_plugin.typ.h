@@ -27,58 +27,57 @@
 #define _STATION_APP_PLUGIN_TYP_H_
 
 #include <station/index.typ.h>
-#include <stdbool.h>
 
 struct station_state;
+struct station_sdl_properties;
 struct station_sdl_context;
-
-/**
- * @brief Application plugin context.
- */
-typedef struct station_plugin_context {
-    void *resources; ///< Plugin resources.
-
-    struct station_state *initial_state;  ///< Initial state of finite state machine.
-    station_threads_number_t num_threads; ///< Number of parallel processing threads.
-
-    uint32_t sdl_init_flags; ///< Flags to pass to SDL_Init() call.
-
-    uint16_t sdl_texture_width;  ///< SDL texture width in pixels.
-    uint16_t sdl_texture_height; ///< SDL texture height in pixels.
-
-    const char *sdl_window_title; ///< SDL window title.
-} station_plugin_context_t;
 
 /**
  * @brief Plugin help function.
  *
  * This function must do nothing besides argument parsing and displaying plugin usage help.
  */
-typedef void (*station_plugin_help_func_t)(int argc, const char *argv[]);
+typedef void (*station_plugin_help_func_t)(
+        int argc,          ///< [in] Number of command line arguments.
+        const char *argv[] ///< [in] Command line arguments.
+);
 
 /**
  * @brief Plugin initialization function.
  *
- * This function must initialize plugin context -- create resources,
- * construct finite state machine, optionally set other context fields.
- * SDL context is not to be modified, it is for storage only.
- * SDL context pointer is not NULL when a window is to be created.
+ * This function must initialize plugin:
+ * create resources, set initial FSM state,
+ * set number of parallel processing threads,
+ * and set SDL-related FSM properties (only when a window is to be created).
  *
- * @return True on success, false on fail.
+ * SDL context pointer is not NULL when a window is to be created.
+ * SDL context is not to be modified, it is for storage only,
+ * so that is can be accessed from state functions later.
+ *
+ * @return Plugin resources.
  */
-typedef bool (*station_plugin_init_func_t)(
-        station_plugin_context_t *plugin_context,
-        struct station_sdl_context *sdl_context,
-        int argc, const char *argv[]);
+typedef void* (*station_plugin_init_func_t)(
+        struct station_state *initial_state,   ///< [out] Initial state of finite state machine.
+        station_threads_number_t *num_threads, ///< [in,out] Number of parallel processing threads.
+
+        struct station_sdl_properties *sdl_properties, ///< [in,out] SDL-related properties of a FSM.
+
+        struct station_sdl_context *sdl_context, ///< [in] SDL context.
+
+        int argc,          ///< [in] Number of command line arguments.
+        const char *argv[] ///< [in] Command line arguments.
+);
 
 /**
  * @brief Plugin finalization function.
  *
- * This function must release plugin resources.
+ * This function is supposed to release plugin resources.
  *
- * @return True on success, false on fail.
+ * @return Application exit code.
  */
-typedef bool (*station_plugin_final_func_t)(void *resources);
+typedef int (*station_plugin_final_func_t)(
+        void *plugin_resources ///< [in] Plugin resources created by the plugin initialization function.
+);
 
 /**
  * @brief Plugin format.

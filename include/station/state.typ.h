@@ -33,9 +33,7 @@
  */
 typedef struct station_state {
     station_sfunc_t sfunc; ///< State function.
-    void *state_data;      ///< State data.
-
-    struct station_state* next_state[]; ///< Array of possible subsequent states.
+    void *data; ///< State data.
 } station_state_t;
 
 #endif // _STATION_STATE_TYP_H_

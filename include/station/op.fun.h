@@ -43,7 +43,7 @@ struct SDL_Rect;
 void
 station_execute_pfunc(
         station_pfunc_t pfunc, ///< [in] Parallel processing function.
-        void *data,   ///< [in] Processed data.
+        void *pfunc_data,      ///< [in] Processed data.
 
         station_tasks_number_t num_tasks,  ///< [in] Number of tasks to be processed.
         station_tasks_number_t batch_size, ///< [in] Number of tasks done by a thread per once.

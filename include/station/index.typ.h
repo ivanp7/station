@@ -29,15 +29,6 @@
 #include <stdint.h>
 
 /**
- * @brief FSM state index.
- */
-typedef uint8_t station_state_idx_t;
-/**
- * @brief Number of FSM states.
- */
-typedef station_state_idx_t station_states_number_t;
-
-/**
  * @brief Index of a parallel task.
  */
 typedef uint32_t station_task_idx_t;

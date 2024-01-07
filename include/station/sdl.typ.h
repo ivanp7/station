@@ -34,6 +34,24 @@ struct SDL_Texture;
 struct SDL_Rect;
 
 /**
+ * @brief SDL-related properties of a finite state machine.
+ */
+typedef struct station_sdl_properties {
+    uint32_t sdl_init_flags; ///< Flags to pass to SDL_Init() call.
+
+    uint16_t texture_width;  ///< Texture width in pixels.
+    uint16_t texture_height; ///< Texture height in pixels.
+
+    uint16_t window_width;  ///< Window width in pixels.
+    uint16_t window_height; ///< Window height in pixels.
+
+    uint8_t window_shown;     ///< Window is shown upon creation.
+    uint8_t window_resizable; ///< Window is resizable.
+
+    const char *window_title; ///< Window title.
+} station_sdl_properties_t;
+
+/**
  * @brief SDL context for a finite state machine.
  */
 typedef struct station_sdl_context {

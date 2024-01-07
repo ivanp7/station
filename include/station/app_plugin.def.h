@@ -51,10 +51,12 @@
  */
 #define STATION_PLUGIN_PREAMBLE()                                       \
     void station_plugin_help(int argc, const char *argv[]);             \
-    bool station_plugin_init(station_plugin_context_t *plugin_context,  \
+    void* station_plugin_init(struct station_state *initial_state,      \
+            station_threads_number_t *num_threads,                      \
+            struct station_sdl_properties *sdl_properties,              \
             struct station_sdl_context *sdl_context,                    \
             int argc, const char *argv[]);                              \
-    bool station_plugin_final(void *resources);                         \
+    int station_plugin_final(void *plugin_resources);                   \
     station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {            \
         .signature = STATION_PLUGIN_SIGNATURE,                          \
         .version = STATION_PLUGIN_VERSION};                             \
@@ -72,16 +74,18 @@
 /**
  * @brief Implement plugin initialization function.
  */
-#define STATION_PLUGIN_INIT(plugin_context, sdl_context, argc, argv)    \
-    bool station_plugin_init(station_plugin_context_t *plugin_context,  \
-            struct station_sdl_context *sdl_context,                    \
+#define STATION_PLUGIN_INIT(initial_state, num_threads, sdl_properties, sdl_context, argc, argv) \
+    void* station_plugin_init(station_state_t *initial_state,   \
+            station_threads_number_t *num_threads,              \
+            station_sdl_properties_t *sdl_properties,           \
+            struct station_sdl_context *sdl_context,            \
             int argc, const char *argv[])
 
 /**
  * @brief Implement plugin finalization function.
  */
-#define STATION_PLUGIN_FINAL(resources) \
-    bool station_plugin_final(void *resources)
+#define STATION_PLUGIN_FINAL(plugin_resources) \
+    int station_plugin_final(void *plugin_resources)
 
 #endif // _STATION_APP_PLUGIN_DEF_H_
 

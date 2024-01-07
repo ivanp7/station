@@ -26,9 +26,9 @@
 #ifndef _STATION_FSM_FUN_H_
 #define _STATION_FSM_FUN_H_
 
-#include <station/index.typ.h>
+#include <station/state.typ.h>
 
-struct station_state;
+struct station_sdl_properties;
 struct station_sdl_context;
 
 /**
@@ -39,7 +39,7 @@ struct station_sdl_context;
  */
 uint8_t
 station_finite_state_machine(
-        struct station_state *initial_state, ///< [in] Initial state of finite state machine.
+        station_state_t state, ///< [in] Initial state of finite state machine.
         station_threads_number_t num_threads ///< [in] Number of parallel processing threads.
 );
 
@@ -63,18 +63,12 @@ station_finite_state_machine(
  */
 uint8_t
 station_finite_state_machine_sdl(
-        struct station_state *initial_state,  ///< [in] Initial state of finite state machine.
+        station_state_t state, ///< [in] Initial state of finite state machine.
         station_threads_number_t num_threads, ///< [in] Number of parallel processing threads.
 
-        struct station_sdl_context *sdl_context, ///< [out] SDL context.
-        uint32_t sdl_init_flags, ///< [in] Flags to pass to SDL_Init() call.
+        const struct station_sdl_properties *sdl_properties, ///< [in] SDL-related properties of finite state machine.
 
-        uint16_t texture_width,  ///< [in] Texture width in pixels.
-        uint16_t texture_height, ///< [in] Texture height in pixels.
-
-        const char *window_title, ///< [in] Window title.
-        uint16_t window_width,    ///< [in] Window width in pixels.
-        uint16_t window_height    ///< [in] Window height in pixels.
+        struct station_sdl_context *sdl_context ///< [out] SDL context.
 );
 
 #endif // _STATION_FSM_FUN_H_

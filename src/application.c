@@ -54,11 +54,11 @@ int main(int argc, const char *argv[])
         struct args_parser_params params;
         args_parser_params_init(&params);
 
-        params.override = false;
-        params.initialize = false;
-        params.check_required = true;
-        params.check_ambiguity = false;
-        params.print_errors = true;
+        params.override = 0;
+        params.initialize = 0;
+        params.check_required = 1;
+        params.check_ambiguity = 0;
+        params.print_errors = 1;
 
         for (unsigned i = 0; i < args.argfile_given; i++)
             if (args_parser_config_file(args.argfile_arg[i], &args, &params) != 0)
@@ -148,7 +148,7 @@ int main(int argc, const char *argv[])
 
         if (!args.help_given)
         {
-            if (args.no_window_given)
+            if (args.no_sdl_given)
                 fprintf(stderr, "Window: none\n");
             else
             {
@@ -261,9 +261,17 @@ int main(int argc, const char *argv[])
     // Initialize plugin //
     ///////////////////////
 
-    station_plugin_context_t plugin_context = {
-        .num_threads = args.threads_arg,
-        .sdl_window_title = args.window_title_arg,
+    void *plugin_resources = NULL;
+
+    station_state_t initial_state = {0};
+    station_threads_number_t num_threads = args.threads_arg;
+
+    station_sdl_properties_t sdl_properties = {
+        .window_width = args.window_width_arg,
+        .window_height = args.window_height_arg,
+        .window_shown = args.window_shown_given,
+        .window_resizable = args.window_resizable_given,
+        .window_title = args.window_title_arg,
     };
 
     station_sdl_context_t sdl_context = {0};
@@ -275,8 +283,9 @@ int main(int argc, const char *argv[])
             fprintf(stderr, "===============================================================================\n\n");
         }
 
-        bool init_successful = plugin_vtable->init_fn(&plugin_context,
-                args.no_window_given ? NULL : &sdl_context,
+        plugin_resources = plugin_vtable->init_fn(&initial_state, &num_threads,
+                args.no_sdl_given ? NULL : &sdl_properties,
+                args.no_sdl_given ? NULL : &sdl_context,
                 plugin_argc, plugin_argv);
 
         if (args.verbose_given)
@@ -285,32 +294,18 @@ int main(int argc, const char *argv[])
             fprintf(stderr, "<<< End of plugin initialization >>>\n");
         }
 
-        if (!init_successful)
+        if (!args.no_sdl_given)
         {
-            fprintf(stderr, "\nError: plugin initialization was not successful.\n");
-            goto CLEANUP;
+            if (sdl_properties.window_title == NULL)
+                sdl_properties.window_title = args.inputs[0];
         }
-
-        if (plugin_context.sdl_texture_width == 0)
-        {
-            fprintf(stderr, "\nError: plugin failed to set non-zero texture width.\n");
-            goto CLEANUP;
-        }
-        else if (plugin_context.sdl_texture_height == 0)
-        {
-            fprintf(stderr, "\nError: plugin failed to set non-zero texture height.\n");
-            goto CLEANUP;
-        }
-
-        if (plugin_context.sdl_window_title == NULL)
-            plugin_context.sdl_window_title = args.inputs[0];
 
         if (args.verbose_given)
         {
             fprintf(stderr, "\n");
-            fprintf(stderr, "Threads: %u\n", plugin_context.num_threads);
-            if (!args.no_window_given)
-                fprintf(stderr, "SDL texture: %ux%u\n", plugin_context.sdl_texture_width, plugin_context.sdl_texture_height);
+            fprintf(stderr, "Threads: %u\n", num_threads);
+            if (!args.no_sdl_given)
+                fprintf(stderr, "SDL texture: %ux%u\n", sdl_properties.texture_width, sdl_properties.texture_height);
             fprintf(stderr, "\n");
         }
     }
@@ -319,9 +314,6 @@ int main(int argc, const char *argv[])
     // Execute the finite state machine //
     //////////////////////////////////////
 
-    uint8_t fsm_error = 0;
-
-    if (plugin_context.initial_state != NULL)
     {
         if (args.verbose_given)
         {
@@ -329,13 +321,12 @@ int main(int argc, const char *argv[])
             fprintf(stderr, "===============================================================================\n\n");
         }
 
-        if (args.no_window_given)
-            fsm_error = station_finite_state_machine(plugin_context.initial_state, plugin_context.num_threads);
+        uint8_t fsm_error;
+
+        if (args.no_sdl_given)
+            fsm_error = station_finite_state_machine(initial_state, num_threads);
         else
-            fsm_error = station_finite_state_machine_sdl(plugin_context.initial_state, plugin_context.num_threads,
-                    &sdl_context, plugin_context.sdl_init_flags,
-                    plugin_context.sdl_texture_width, plugin_context.sdl_texture_height,
-                    plugin_context.sdl_window_title, args.window_width_arg, args.window_height_arg);
+            fsm_error = station_finite_state_machine_sdl(initial_state, num_threads, &sdl_properties, &sdl_context);
 
         if (args.verbose_given)
         {
@@ -361,23 +352,14 @@ int main(int argc, const char *argv[])
             fprintf(stderr, "===============================================================================\n\n");
         }
 
-        bool exec_successful = plugin_vtable->final_fn(plugin_context.resources);
+        code = plugin_vtable->final_fn(plugin_resources);
 
         if (args.verbose_given)
         {
             fprintf(stderr, "\n===============================================================================\n");
             fprintf(stderr, "<<< End of plugin finalization >>>\n");
         }
-
-        if (!exec_successful)
-        {
-            fprintf(stderr, "\nError: plugin execution was not successful.\n");
-            goto CLEANUP;
-        }
     }
-
-    if (fsm_error == 0)
-        code = 0;
 
     ///////////////////////
     // Release resources //
