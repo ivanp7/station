@@ -28,7 +28,7 @@
 
 #include <station/func.typ.h>
 
-struct station_context;
+struct station_fsm_context;
 struct station_sdl_context;
 struct SDL_Rect;
 
@@ -48,7 +48,7 @@ station_execute_pfunc(
         station_tasks_number_t num_tasks,  ///< [in] Number of tasks to be processed.
         station_tasks_number_t batch_size, ///< [in] Number of tasks done by a thread per once.
 
-        struct station_context *context ///< [in] Finite state machine context.
+        struct station_fsm_context *context ///< [in] Finite state machine context.
 );
 
 /**

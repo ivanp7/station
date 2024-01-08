@@ -19,37 +19,54 @@
 
 /**
  * @file
- * @brief Finite state machine function types.
+ * @brief Constants and macros for finite state machine execution.
  */
 
 #pragma once
-#ifndef _STATION_FUNC_TYP_H_
-#define _STATION_FUNC_TYP_H_
-
-#include <station/index.typ.h>
-
-struct station_state;
-struct station_fsm_context;
+#ifndef _STATION_FSM_DEF_H_
+#define _STATION_FSM_DEF_H_
 
 /**
- * @brief State function of a finite state machine.
- *
- * State function is supposed to modify 'state' argument, setting it to the next FSM state.
- * If the next state function is NULL, then FSM execution is terminated.
+ * @brief Finite state machine execution result: success.
  */
-typedef void (*station_sfunc_t)(
-        struct station_state *state, ///< [in,out] Current state.
-        struct station_fsm_context *context ///< [in] Finite state machine context.
-);
+#define STATION_FSM_EXEC_SUCCESS 0
+/**
+ * @brief Finite state machine execution result: inputs are incorrect.
+ */
+#define STATION_FSM_EXEC_INCORRECT_INPUTS 1
+/**
+ * @brief Finite state machine execution result: malloc() failure.
+ */
+#define STATION_FSM_EXEC_MALLOC_FAIL 2
+/**
+ * @brief Finite state machine execution result: thrd_create() failure - thrd_nomem.
+ */
+#define STATION_FSM_EXEC_THRD_NOMEM 3
+/**
+ * @brief Finite state machine execution result: thrd_create() failure - thrd_error.
+ */
+#define STATION_FSM_EXEC_THRD_ERROR 4
 
 /**
- * @brief Parallel processing function of a finite state machine.
+ * @brief Finite state machine execution result: SDL is not supported.
  */
-typedef void (*station_pfunc_t)(
-        void *data, ///< [in,out] Processed data.
-        station_task_idx_t task_idx,    ///< [in] Index of the current task.
-        station_thread_idx_t thread_idx ///< [in] Index of the current thread.
-);
+#define STATION_FSM_EXEC_SDL_NOT_SUPPORTED 5
+/**
+ * @brief Finite state machine execution result: SDL_Init() failure.
+ */
+#define STATION_FSM_EXEC_SDL_INIT_FAIL 6
+/**
+ * @brief Finite state machine execution result: SDL_CreateWindow() failure.
+ */
+#define STATION_FSM_EXEC_SDL_CREATE_WINDOW_FAIL 7
+/**
+ * @brief Finite state machine execution result: SDL_CreateRenderer() failure.
+ */
+#define STATION_FSM_EXEC_SDL_CREATE_RENDERER_FAIL 8
+/**
+ * @brief Finite state machine execution result: SDL_CreateTexture() failure.
+ */
+#define STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL 9
 
-#endif // _STATION_FUNC_TYP_H_
+#endif // _STATION_FSM_DEF_H_
 

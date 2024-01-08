@@ -4,14 +4,17 @@
 
 #include "application_args.h"
 
-#include <station/app_plugin.typ.h>
-#include <station/app_plugin.def.h>
+#include <station/plugin.typ.h>
+#include <station/plugin.def.h>
+
 #include <station/fsm.fun.h>
+#include <station/fsm.def.h>
+
 #include <station/sdl.typ.h>
 
 #define STRINGIFY(obj) #obj
 
-int main(int argc, const char *argv[])
+int main(int argc, char *argv[])
 {
     fprintf(stderr, " ]                                     [\n");
     fprintf(stderr, " ]         Station application         [\n");
@@ -30,12 +33,13 @@ int main(int argc, const char *argv[])
 #define CLEANUP free_args
 
     int plugin_argc = 0;
-    const char **plugin_argv = argv + argc;
+    char **plugin_argv = argv + argc;
     {
         // Parse application arguments
         int app_argc = argc;
 
         for (int i = 1; i < argc; i++)
+        {
             if (strcmp(argv[i], "--") == 0)
             {
                 app_argc = i;
@@ -43,8 +47,9 @@ int main(int argc, const char *argv[])
                 plugin_argv = argv + i;
                 break;
             }
+        }
 
-        if (args_parser(app_argc, (char**)argv, &args) != 0)
+        if (args_parser(app_argc, argv, &args) != 0)
         {
             fprintf(stderr, "\nError: couldn't parse application arguments.\n");
             goto CLEANUP;
@@ -61,11 +66,13 @@ int main(int argc, const char *argv[])
         params.print_errors = 1;
 
         for (unsigned i = 0; i < args.argfile_given; i++)
+        {
             if (args_parser_config_file(args.argfile_arg[i], &args, &params) != 0)
             {
                 fprintf(stderr, "\nError: couldn't parse application arguments file '%s'.\n", args.argfile_arg[i]);
                 goto CLEANUP;
             }
+        }
     }
 
     if (!args.threads_given)
@@ -284,8 +291,8 @@ int main(int argc, const char *argv[])
         }
 
         plugin_resources = plugin_vtable->init_fn(&initial_state, &num_threads,
-                args.no_sdl_given ? NULL : &sdl_properties,
-                args.no_sdl_given ? NULL : &sdl_context,
+                args.no_sdl_given ? (station_sdl_properties_t*)NULL : &sdl_properties,
+                args.no_sdl_given ? (station_sdl_context_t*)NULL : &sdl_context,
                 plugin_argc, plugin_argv);
 
         if (args.verbose_given)
@@ -321,12 +328,12 @@ int main(int argc, const char *argv[])
             fprintf(stderr, "===============================================================================\n\n");
         }
 
-        uint8_t fsm_error;
+        uint8_t fsm_code;
 
         if (args.no_sdl_given)
-            fsm_error = station_finite_state_machine(initial_state, num_threads);
+            fsm_code = station_finite_state_machine(initial_state, num_threads);
         else
-            fsm_error = station_finite_state_machine_sdl(initial_state, num_threads, &sdl_properties, &sdl_context);
+            fsm_code = station_finite_state_machine_sdl(initial_state, num_threads, &sdl_properties, &sdl_context);
 
         if (args.verbose_given)
         {
@@ -334,9 +341,9 @@ int main(int argc, const char *argv[])
             fprintf(stderr, "<<< End of plugin execution >>>\n");
         }
 
-        if (fsm_error != 0)
+        if (fsm_code != STATION_FSM_EXEC_SUCCESS)
         {
-            fprintf(stderr, "\nError: Finite state machine returned error code %u.\n", fsm_error);
+            fprintf(stderr, "\nError: Finite state machine returned code %u.\n", fsm_code);
             fprintf(stderr, "\n");
         }
     }

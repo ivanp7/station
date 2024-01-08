@@ -34,8 +34,7 @@ struct station_sdl_context;
 /**
  * @brief Execute a finite state machine.
  *
- * @return 0 on success, 1 on malloc() failure, 2-4 on thrd_create() failure
- * (2: thrd_nomem, 3: thrd_error, 4: other).
+ * @return Execution status.
  */
 uint8_t
 station_finite_state_machine(
@@ -57,9 +56,7 @@ station_finite_state_machine(
  * 3. SDL_CreateRenderer()
  * 4. SDL_CreateTexture()
  *
- * @return Zero on success, or number of failed initialization step.
- * Higher return codes correspond to non-zero return codes of station_finite_state_machine() plus 4.
- * In case SDL is not supported, this function returns maximum value of the return type.
+ * @return Execution status.
  */
 uint8_t
 station_finite_state_machine_sdl(

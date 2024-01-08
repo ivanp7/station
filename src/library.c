@@ -28,6 +28,12 @@
 #include <station/state.typ.h>
 #include <station/sdl.typ.h>
 
+#include <station/fsm.def.h>
+
+#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
+#  error "threads and/or atomics are not available"
+#endif
+
 #include <threads.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -41,11 +47,7 @@
 #  include <SDL_render.h>
 #endif
 
-#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
-#  error "threads and/or atomics are not available"
-#endif
-
-struct station_context {
+struct station_fsm_context {
     station_pfunc_t pfunc;
     void *pfunc_data;
 
@@ -77,7 +79,7 @@ station_execute_pfunc(
         station_tasks_number_t num_tasks,
         station_tasks_number_t batch_size,
 
-        struct station_context *context)
+        struct station_fsm_context *context)
 {
     assert(context != NULL);
 
@@ -181,7 +183,7 @@ station_sdl_unlock_texture_and_render(
 ///////////////////////////////////////////////////////////////////////////////
 
 struct station_thread_context {
-    struct station_context *context;
+    struct station_fsm_context *context;
     station_thread_idx_t thread_idx;
 };
 
@@ -190,7 +192,7 @@ int
 station_finite_state_machine_thread(
         void *arg)
 {
-    struct station_context *context;
+    struct station_fsm_context *context;
     station_thread_idx_t thread_idx;
     {
         assert(arg != NULL);
@@ -272,10 +274,11 @@ station_finite_state_machine(
         station_state_t state,
         station_threads_number_t num_threads)
 {
-    uint8_t result = 0;
+    if (state.sfunc == NULL)
+        return STATION_FSM_EXEC_SUCCESS;
 
     // Initialize context
-    struct station_context context = {
+    struct station_fsm_context context = {
         .num_threads = num_threads,
     };
     atomic_init(&context.done_tasks, 0);
@@ -283,23 +286,28 @@ station_finite_state_machine(
     atomic_init(&context.ping_flag, false);
     atomic_init(&context.pong_flag, false);
 
-    // Create threads
     thrd_t *threads = NULL;
+    station_thread_idx_t thread_idx = 0;
+
+    uint8_t result = STATION_FSM_EXEC_SUCCESS;
+
+    // Create threads
     if (num_threads > 0)
     {
         threads = malloc(sizeof(*threads) * num_threads);
         if (threads == NULL)
-            return 1;
+        {
+            result = STATION_FSM_EXEC_MALLOC_FAIL;
+            goto cleanup;
+        }
     }
-
-    station_thread_idx_t thread_idx;
 
     for (thread_idx = 0; thread_idx < num_threads; thread_idx++)
     {
         struct station_thread_context *thread_context = malloc(sizeof(*thread_context));
         if (thread_context == NULL)
         {
-            result = 1;
+            result = STATION_FSM_EXEC_MALLOC_FAIL;
             goto cleanup;
         }
 
@@ -314,11 +322,9 @@ station_finite_state_machine(
             free(thread_context);
 
             if (res == thrd_nomem)
-                result = 2;
-            else if (res == thrd_error)
-                result = 3;
+                result = STATION_FSM_EXEC_THRD_NOMEM;
             else
-                result = 4;
+                result = STATION_FSM_EXEC_THRD_ERROR;
 
             goto cleanup;
         }
@@ -349,7 +355,6 @@ station_finite_state_machine_sdl(
         station_threads_number_t num_threads,
 
         const station_sdl_properties_t *sdl_properties,
-
         station_sdl_context_t *sdl_context)
 {
 #ifndef STATION_IS_SDL_SUPPORTED
@@ -357,31 +362,33 @@ station_finite_state_machine_sdl(
     (void) num_threads;
     (void) sdl_properties;
     (void) sdl_context;
-    return -1;
+
+    return STATION_FSM_EXEC_SDL_NOT_SUPPORTED;
 #else
     assert(sdl_properties != NULL);
     assert(sdl_context != NULL);
 
     if ((sdl_properties->texture_width == 0) || (sdl_properties->texture_height == 0))
-        return 1;
-
-    uint8_t result = 0;
+        return STATION_FSM_EXEC_INCORRECT_INPUTS;
 
     // Initialize SDL and resources
     if (SDL_Init(SDL_INIT_VIDEO | sdl_properties->sdl_init_flags) < 0)
-        return 2;
+        return STATION_FSM_EXEC_SDL_INIT_FAIL;
 
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
     SDL_Texture *texture = NULL;
 
+    uint8_t result = STATION_FSM_EXEC_SUCCESS;
+
     uint32_t window_flags = 0;
+    {
+        if (!sdl_properties->window_shown)
+            window_flags |= SDL_WINDOW_HIDDEN;
 
-    if (!sdl_properties->window_shown)
-        window_flags |= SDL_WINDOW_HIDDEN;
-
-    if (sdl_properties->window_resizable)
-        window_flags |= SDL_WINDOW_RESIZABLE;
+        if (sdl_properties->window_resizable)
+            window_flags |= SDL_WINDOW_RESIZABLE;
+    }
 
     window = SDL_CreateWindow(sdl_properties->window_title != NULL ? sdl_properties->window_title : "",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -390,7 +397,7 @@ station_finite_state_machine_sdl(
             window_flags);
     if (window == NULL)
     {
-        result = 3;
+        result = STATION_FSM_EXEC_SDL_CREATE_WINDOW_FAIL;
         goto cleanup;
     }
 
@@ -399,7 +406,7 @@ station_finite_state_machine_sdl(
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     if (renderer == NULL)
     {
-        result = 4;
+        result = STATION_FSM_EXEC_SDL_CREATE_RENDERER_FAIL;
         goto cleanup;
     }
 
@@ -408,7 +415,7 @@ station_finite_state_machine_sdl(
             sdl_properties->texture_width, sdl_properties->texture_height);
     if (texture == NULL)
     {
-        result = 5;
+        result = STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL;
         goto cleanup;
     }
 
@@ -427,8 +434,17 @@ station_finite_state_machine_sdl(
     // Execute finite state machine
     result = station_finite_state_machine(state, num_threads);
 
-    if (result != 0)
-        result += 5;
+    // Clear SDL context
+    sdl_context->window = NULL;
+    sdl_context->renderer = NULL;
+    sdl_context->texture = NULL;
+
+    sdl_context->texture_lock_rectangle = NULL;
+    sdl_context->texture_lock_pixels = NULL;
+    sdl_context->texture_lock_pitch = 0;
+
+    sdl_context->texture_width = 0;
+    sdl_context->texture_height = 0;
 
 cleanup:
     // Release resources and finalize SDL

@@ -23,8 +23,8 @@
  */
 
 #pragma once
-#ifndef _STATION_APP_PLUGIN_TYP_H_
-#define _STATION_APP_PLUGIN_TYP_H_
+#ifndef _STATION_PLUGIN_TYP_H_
+#define _STATION_PLUGIN_TYP_H_
 
 #include <station/index.typ.h>
 
@@ -38,8 +38,8 @@ struct station_sdl_context;
  * This function must do nothing besides argument parsing and displaying plugin usage help.
  */
 typedef void (*station_plugin_help_func_t)(
-        int argc,          ///< [in] Number of command line arguments.
-        const char *argv[] ///< [in] Command line arguments.
+        int argc,    ///< [in] Number of command line arguments.
+        char *argv[] ///< [in] Command line arguments.
 );
 
 /**
@@ -64,8 +64,8 @@ typedef void* (*station_plugin_init_func_t)(
 
         struct station_sdl_context *sdl_context, ///< [in] SDL context.
 
-        int argc,          ///< [in] Number of command line arguments.
-        const char *argv[] ///< [in] Command line arguments.
+        int argc,    ///< [in] Number of command line arguments.
+        char *argv[] ///< [in] Command line arguments.
 );
 
 /**
@@ -96,5 +96,5 @@ typedef struct station_plugin_vtable {
     station_plugin_final_func_t final_fn; ///< Pointer to plugin finalization function.
 } station_plugin_vtable_t;
 
-#endif // _STATION_APP_PLUGIN_TYP_H_
+#endif // _STATION_PLUGIN_TYP_H_
 
