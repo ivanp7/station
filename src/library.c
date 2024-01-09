@@ -299,10 +299,6 @@ station_finite_state_machine(
     struct station_fsm_context context = {
         .num_threads = num_threads,
     };
-    atomic_init(&context.done_tasks, 0);
-    atomic_init(&context.thread_counter, 0);
-    atomic_init(&context.ping_flag, false);
-    atomic_init(&context.pong_flag, false);
 
     thrd_t *threads = NULL;
     station_thread_idx_t thread_idx = 0;
