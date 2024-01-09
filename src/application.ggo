@@ -14,12 +14,27 @@ option "verbose" v "Display more information"
 
 option "argfile" a "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
 
+section "Execution options"
 option "threads" j "Number of parallel processing threads" int typestr="THREADS"
 option "no-sdl" n "Disable SDL support"
 
+section "Window options"
 option "window-shown" w "Make SDL window shown upon creation"
 option "window-resizable" r "Make SDL window resizable"
 option "window-title" t "SDL window title" string
 option "window-width"  x "SDL window width"  int typestr="PIXELS"
 option "window-height" y "SDL window height" int typestr="PIXELS"
+
+section "Signal management"
+option "SIGHUP" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGINT" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGQUIT" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGUSR1" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGUSR2" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGALRM" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGTERM" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGTSTP" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGTTIN" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGTTOU" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGWINCH" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
 

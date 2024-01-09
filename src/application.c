@@ -12,7 +12,7 @@
 
 #include <station/sdl.typ.h>
 
-#define STRINGIFY(obj) #obj
+#include <station/signal.fun.h>
 
 int main(int argc, char *argv[])
 {
@@ -133,6 +133,98 @@ int main(int argc, char *argv[])
         }
     }
 
+    /////////////////////////////////
+    // Configure signal management //
+    /////////////////////////////////
+
+    if (args.SIGHUP_given)
+    {
+        if (args.SIGHUP_arg == SIGHUP_arg_watch)
+            station_signal_handler_watch_SIGHUP();
+        else if (args.SIGHUP_arg == SIGHUP_arg_ignore)
+            station_signal_handler_ignore_SIGHUP();
+    }
+
+    if (args.SIGINT_given)
+    {
+        if (args.SIGINT_arg == SIGINT_arg_watch)
+            station_signal_handler_watch_SIGINT();
+        else if (args.SIGINT_arg == SIGINT_arg_ignore)
+            station_signal_handler_ignore_SIGINT();
+    }
+
+    if (args.SIGQUIT_given)
+    {
+        if (args.SIGQUIT_arg == SIGQUIT_arg_watch)
+            station_signal_handler_watch_SIGQUIT();
+        else if (args.SIGQUIT_arg == SIGQUIT_arg_ignore)
+            station_signal_handler_ignore_SIGQUIT();
+    }
+
+    if (args.SIGUSR1_given)
+    {
+        if (args.SIGUSR1_arg == SIGUSR1_arg_watch)
+            station_signal_handler_watch_SIGUSR1();
+        else if (args.SIGUSR1_arg == SIGUSR1_arg_ignore)
+            station_signal_handler_ignore_SIGUSR1();
+    }
+
+    if (args.SIGUSR2_given)
+    {
+        if (args.SIGUSR2_arg == SIGUSR2_arg_watch)
+            station_signal_handler_watch_SIGUSR2();
+        else if (args.SIGUSR2_arg == SIGUSR2_arg_ignore)
+            station_signal_handler_ignore_SIGUSR2();
+    }
+
+    if (args.SIGALRM_given)
+    {
+        if (args.SIGALRM_arg == SIGALRM_arg_watch)
+            station_signal_handler_watch_SIGALRM();
+        else if (args.SIGALRM_arg == SIGALRM_arg_ignore)
+            station_signal_handler_ignore_SIGALRM();
+    }
+
+    if (args.SIGTERM_given)
+    {
+        if (args.SIGTERM_arg == SIGTERM_arg_watch)
+            station_signal_handler_watch_SIGTERM();
+        else if (args.SIGTERM_arg == SIGTERM_arg_ignore)
+            station_signal_handler_ignore_SIGTERM();
+    }
+
+    if (args.SIGTSTP_given)
+    {
+        if (args.SIGTSTP_arg == SIGTSTP_arg_watch)
+            station_signal_handler_watch_SIGTSTP();
+        else if (args.SIGTSTP_arg == SIGTSTP_arg_ignore)
+            station_signal_handler_ignore_SIGTSTP();
+    }
+
+    if (args.SIGTTIN_given)
+    {
+        if (args.SIGTTIN_arg == SIGTTIN_arg_watch)
+            station_signal_handler_watch_SIGTTIN();
+        else if (args.SIGTTIN_arg == SIGTTIN_arg_ignore)
+            station_signal_handler_ignore_SIGTTIN();
+    }
+
+    if (args.SIGTTOU_given)
+    {
+        if (args.SIGTTOU_arg == SIGTTOU_arg_watch)
+            station_signal_handler_watch_SIGTTOU();
+        else if (args.SIGTTOU_arg == SIGTTOU_arg_ignore)
+            station_signal_handler_ignore_SIGTTOU();
+    }
+
+    if (args.SIGWINCH_given)
+    {
+        if (args.SIGWINCH_arg == SIGWINCH_arg_watch)
+            station_signal_handler_watch_SIGWINCH();
+        else if (args.SIGWINCH_arg == SIGWINCH_arg_ignore)
+            station_signal_handler_ignore_SIGWINCH();
+    }
+
     /////////////////////
     // Print arguments //
     /////////////////////
@@ -197,6 +289,8 @@ int main(int argc, char *argv[])
     /////////////////////////
     // Check plugin format //
     /////////////////////////
+
+#define STRINGIFY(obj) #obj
 
     {
         station_plugin_format_t *plugin_format = dlsym(plugin, STRINGIFY(STATION_PLUGIN_FORMAT_OBJECT));
