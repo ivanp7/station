@@ -50,11 +50,12 @@
  * Declares functions, defines global objects.
  */
 #define STATION_PLUGIN_PREAMBLE()                                   \
-    void station_plugin_help(int argc, char *argv[]);               \
+    int station_plugin_help(int argc, char *argv[]);                \
     void* station_plugin_init(struct station_state *initial_state,  \
             station_threads_number_t *num_threads,                  \
             struct station_sdl_properties *sdl_properties,          \
             struct station_sdl_context *sdl_context,                \
+            struct station_opencl_context *opencl_context,          \
             int argc, char *argv[]);                                \
     int station_plugin_final(void *plugin_resources);               \
     station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {        \
@@ -69,16 +70,17 @@
  * @brief Implement plugin help function.
  */
 #define STATION_PLUGIN_HELP(argc, argv) \
-    void station_plugin_help(int argc, char *argv[])
+    int station_plugin_help(int argc, char *argv[])
 
 /**
  * @brief Implement plugin initialization function.
  */
-#define STATION_PLUGIN_INIT(initial_state, num_threads, sdl_properties, sdl_context, argc, argv) \
+#define STATION_PLUGIN_INIT(initial_state, num_threads, sdl_properties, sdl_context, opencl_context, argc, argv) \
     void* station_plugin_init(station_state_t *initial_state,   \
             station_threads_number_t *num_threads,              \
             station_sdl_properties_t *sdl_properties,           \
             struct station_sdl_context *sdl_context,            \
+            struct station_opencl_context *opencl_context,      \
             int argc, char *argv[])
 
 /**

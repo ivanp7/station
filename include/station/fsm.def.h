@@ -48,25 +48,27 @@
 #define STATION_FSM_EXEC_THRD_ERROR 4
 
 /**
- * @brief Finite state machine execution result: SDL is not supported.
- */
-#define STATION_FSM_EXEC_SDL_NOT_SUPPORTED 5
-/**
  * @brief Finite state machine execution result: SDL_Init() failure.
  */
-#define STATION_FSM_EXEC_SDL_INIT_FAIL 6
+#define STATION_FSM_EXEC_SDL_INIT_FAIL 5
 /**
  * @brief Finite state machine execution result: SDL_CreateWindow() failure.
  */
-#define STATION_FSM_EXEC_SDL_CREATE_WINDOW_FAIL 7
+#define STATION_FSM_EXEC_SDL_CREATE_WINDOW_FAIL 6
 /**
  * @brief Finite state machine execution result: SDL_CreateRenderer() failure.
  */
-#define STATION_FSM_EXEC_SDL_CREATE_RENDERER_FAIL 8
+#define STATION_FSM_EXEC_SDL_CREATE_RENDERER_FAIL 7
 /**
  * @brief Finite state machine execution result: SDL_CreateTexture() failure.
  */
-#define STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL 9
+#define STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL 8
+
+/**
+ * @brief Check if finite state machine failure is caused by SDL.
+ */
+#define STATION_FSM_EXEC_IS_SDL_FAILED(status) \
+    (((status) >= STATION_FSM_EXEC_SDL_INIT_FAIL) && ((status) <= STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL))
 
 #endif // _STATION_FSM_DEF_H_
 

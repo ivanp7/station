@@ -372,12 +372,10 @@ station_finite_state_machine_sdl(
         station_sdl_context_t *sdl_context)
 {
 #ifndef STATION_IS_SDL_SUPPORTED
-    (void) state;
-    (void) num_threads;
     (void) sdl_properties;
     (void) sdl_context;
 
-    return STATION_FSM_EXEC_SDL_NOT_SUPPORTED;
+    return station_finite_state_machine(state, num_threads);
 #else
     assert(sdl_properties != NULL);
     assert(sdl_context != NULL);

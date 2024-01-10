@@ -3,27 +3,31 @@ version "1.0"
 versiontext "Copyright (C) 2024 by Ivan Podmazov"
 
 usage "
-station-app [app options...] PLUGIN_FILE [-- [plugin options...]]
+station-app [options...] PLUGIN_FILE [-- [plugin options...]]
+    or
 station-app --help"
 
-args "--conf-parser --default-optional --no-help --no-version --unnamed-opts=PLUGIN_FILE"
+args "--conf-parser --default-optional --no-handle-error --no-help --no-version --unnamed-opts=PLUGIN_FILE"
 
 
-option "help" h "Display usage help for app or plugin"
+option "conf" F "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
+
+section "Output options"
 option "verbose" v "Display more information"
-
-option "argfile" a "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
+option "cl-list" l "Display list of OpenCL platforms (provide twice to display devices of each platform)" multiple
 
 section "Execution options"
+option "help" h "Display usage help for app or plugin, don't run"
 option "threads" j "Number of parallel processing threads" int typestr="THREADS"
-option "no-sdl" n "Disable SDL support"
+option "cl-context" c "Create OpenCL context (multiple allowed)" string typestr="PLATFORM_IDX[:DEVICE_IDX_MASK]" multiple
+option "no-sdl" n "Don't provide SDL context"
 
 section "Window options"
 option "window-shown" w "Make SDL window shown upon creation"
 option "window-resizable" r "Make SDL window resizable"
 option "window-title" t "SDL window title" string
-option "window-width"  x "SDL window width"  int typestr="PIXELS"
-option "window-height" y "SDL window height" int typestr="PIXELS"
+option "window-width"  x "SDL window width"  int typestr="SIZE"
+option "window-height" y "SDL window height" int typestr="SIZE"
 
 section "Signal management"
 option "SIGHUP" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional

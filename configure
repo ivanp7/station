@@ -69,6 +69,10 @@ do
             FEATURE_IS_SDL_SUPPORTED="true"
             ;;
 
+        O) # feature: enable support for OpenCL
+            FEATURE_IS_OPENCL_SUPPORTED="true"
+            ;;
+
         Y) # feature: enable thread yielding
             FEATURE_IS_THREAD_YIELD_ENABLED="true"
             ;;
@@ -96,8 +100,17 @@ else
     LFLAGS_SDL=""
 fi
 
-CFLAGS_COMMON="-pthread $CFLAGS_SDL"
-LFLAGS_COMMON="$LFLAGS_SDL"
+if [ "${FEATURE_IS_OPENCL_SUPPORTED:-}" ]
+then
+    CFLAGS_OPENCL="$(pkg-config --cflags OpenCL) -DCL_TARGET_OPENCL_VERSION=300"
+    LFLAGS_OPENCL="$(pkg-config --libs OpenCL)"
+else
+    CFLAGS_OPENCL=""
+    LFLAGS_OPENCL=""
+fi
+
+CFLAGS_COMMON="-pthread $CFLAGS_SDL $CFLAGS_OPENCL"
+LFLAGS_COMMON="$LFLAGS_SDL $LFLAGS_OPENCL"
 
 case "${BUILD_TYPE:-}" in
     "debug") CFLAGS_BUILD_TYPE="-O0 -g3 -ggdb" ;; # -Og causes <optimized out> errors in gdb
@@ -114,8 +127,11 @@ $CFLAGS_BUILD_TYPE"
 
 CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
 ${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
+${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"} \
 ${FEATURE_IS_THREAD_YIELD_ENABLED:+"-DSTATION_IS_THREAD_YIELD_ENABLED"}"
-CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR}"
+CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
+${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
+${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"}"
 
 LFLAGS="$LFLAGS_COMMON"
 
@@ -150,7 +166,8 @@ lflags = $LFLAGS
 
 rule gengetopt
     description = gengetopt < \$in
-    command = gengetopt -F ${FILE_APPLICATION_ARGS} -f ${GGO_FUNC_PREFIX} --output-dir=${ODIR} < \$in
+    command = gengetopt --file-name="${FILE_APPLICATION_ARGS}" --func-name="${GGO_FUNC_PREFIX}" --output-dir="${ODIR}" \
+--set-package="${OUT_APPLICATION}" --set-version="${PROJECT_VERSION}" < \$in
 
 rule cc
     description = cc \$in
@@ -199,7 +216,7 @@ build ${ODIR}/${FILE_APPLICATION_ARGS}.h ${ODIR}/${FILE_APPLICATION_ARGS}.c: gen
 build ${ODIR}/${FILE_APPLICATION_ARGS}.o: cc ${ODIR}/${FILE_APPLICATION_ARGS}.c
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c
+build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
     cflags_custom = \$cflags_app
 
 build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o

@@ -31,13 +31,16 @@
 struct station_state;
 struct station_sdl_properties;
 struct station_sdl_context;
+struct station_opencl_context;
 
 /**
  * @brief Plugin help function.
  *
  * This function must do nothing besides argument parsing and displaying plugin usage help.
+ *
+ * @return Application exit code.
  */
-typedef void (*station_plugin_help_func_t)(
+typedef int (*station_plugin_help_func_t)(
         int argc,    ///< [in] Number of command line arguments.
         char *argv[] ///< [in] Command line arguments.
 );
@@ -62,7 +65,8 @@ typedef void* (*station_plugin_init_func_t)(
 
         struct station_sdl_properties *sdl_properties, ///< [in,out] SDL-related properties of a FSM.
 
-        struct station_sdl_context *sdl_context, ///< [in] SDL context.
+        struct station_sdl_context *sdl_context,       ///< [in] SDL context.
+        struct station_opencl_context *opencl_context, ///< [in] OpenCL context.
 
         int argc,    ///< [in] Number of command line arguments.
         char *argv[] ///< [in] Command line arguments.

@@ -56,7 +56,7 @@
  * @note This macro depends on <signal.h> and <stdatomic.h>.
  */
 #define STATION_SIGNAL_SUPPORT_DEFINITION(signal)                                   \
-    static atomic_bool station_signal_flag##signal = false;                         \
+    static atomic_bool station_signal_flag##signal;                                 \
                                                                                     \
     void station_signal_reset_##signal(void) {                                      \
         atomic_store_explicit(&station_signal_flag##signal, false,                  \
@@ -78,10 +78,12 @@
         return (sigaction(signal, &act, (struct sigaction*)NULL) == 0); }           \
                                                                                     \
     bool station_signal_handler_ignore_##signal(void) {                             \
+        station_signal_reset_##signal();                                            \
         struct sigaction act = {.sa_handler = SIG_IGN};                             \
         return (sigaction(signal, &act, (struct sigaction*)NULL) == 0); }           \
                                                                                     \
     bool station_signal_handler_default_##signal(void) {                            \
+        station_signal_reset_##signal();                                            \
         struct sigaction act = {.sa_handler = SIG_DFL};                             \
         return (sigaction(signal, &act, (struct sigaction*)NULL) == 0); }
 
