@@ -37,7 +37,8 @@
 #define ERROR(msg) fprintf(stderr, "\nError: " msg ".\n")
 #define ERROR_(msg, ...) fprintf(stderr, "\nError: " msg ".\n", __VA_ARGS__)
 
-#define STRINGIFY(obj) #obj
+#define STRINGIFY(obj) STRING_OF(obj)
+#define STRING_OF(obj) #obj
 
 
 static struct {
