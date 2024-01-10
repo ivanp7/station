@@ -26,10 +26,10 @@
 #ifndef _STATION_OPENCL_TYP_H_
 #define _STATION_OPENCL_TYP_H_
 
-#include <stdint.h>
-
 #ifdef STATION_IS_OPENCL_SUPPORTED
 #  include <CL/cl.h>
+#else
+#  include <stdint.h>
 #endif
 
 /**
