@@ -22,7 +22,6 @@
  * @brief Library implementation.
  */
 
-#include <station/signal.fun.h>
 #include <station/op.fun.h>
 #include <station/fsm.fun.h>
 
@@ -37,7 +36,6 @@
 
 #include <threads.h>
 #include <stdatomic.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -68,22 +66,6 @@ struct station_fsm_context {
 
     station_threads_number_t num_threads;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-// signal.fun.h
-///////////////////////////////////////////////////////////////////////////////
-
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGHUP)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGINT)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGQUIT)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGUSR1)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGUSR2)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGALRM)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGTERM)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGTSTP)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGTTIN)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGTTOU)
-STATION_SIGNAL_SUPPORT_DEFINITION(SIGWINCH)
 
 ///////////////////////////////////////////////////////////////////////////////
 // op.fun.h

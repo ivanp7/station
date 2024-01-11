@@ -12,8 +12,6 @@
 #include <station/fsm.fun.h>
 #include <station/fsm.def.h>
 
-#include <station/signal.fun.h>
-
 #include <station/sdl.typ.h>
 #include <station/opencl.typ.h>
 
@@ -23,12 +21,11 @@
 #define CODE_OK 0
 #define CODE_ERROR_GENERAL 1
 #define CODE_ERROR_ARGUMENTS 2
-#define CODE_ERROR_SIGNAL 3
-#define CODE_ERROR_PLUGIN 4
-#define CODE_ERROR_OPENCL 5
-#define CODE_ERROR_FSM 6
-#define CODE_ERROR_FSM_SDL 7
-#define CODE_ERROR_MALLOC 8
+#define CODE_ERROR_PLUGIN 3
+#define CODE_ERROR_OPENCL 4
+#define CODE_ERROR_FSM 5
+#define CODE_ERROR_FSM_SDL 6
+#define CODE_ERROR_MALLOC 7
 #define CODE_ERROR_USER 16
 
 
@@ -118,7 +115,6 @@
 #define COLOR_NUMBER COLOR_FG_BRI_YELLOW
 #define COLOR_FLAG_ON COLOR_FG_GREEN
 #define COLOR_FLAG_OFF COLOR_FG_RED
-#define COLOR_SIGNAL COLOR_FG_BRI_MAGENTA
 #define COLOR_VERSION COLOR_FG_BRI_BLUE
 #define COLOR_OUTPUT_SEGMENT COLOR_FG_BRI_BLACK
 #define COLOR_ERROR COLOR_FG_BRI_RED
@@ -599,51 +595,6 @@ static int with_args(void)
             PRINT("\n");
 #endif
         }
-    }
-
-    ///////////////////////////////
-    // Configure signal handlers //
-    ///////////////////////////////
-
-    if (!application.args.help_given)
-    {
-#define CONFIGURE_SIGNAL_HANDLER(signal) do {                           \
-        if (application.args.signal##_given) {                          \
-            switch (application.args.signal##_arg) {                    \
-                case signal##_arg_watch:                                \
-                    if (!station_signal_handler_watch_##signal()) {     \
-                        ERROR("couldn't set handler for "               \
-                                COLOR_SIGNAL #signal COLOR_RESET);      \
-                        return CODE_ERROR_SIGNAL; }                     \
-                    if (application.args.verbose_given)                 \
-                        PRINT("Watching " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
-                    break;                                              \
-                case signal##_arg_ignore:                               \
-                    if (!station_signal_handler_ignore_##signal()) {    \
-                        ERROR("couldn't ignore "                        \
-                                COLOR_SIGNAL #signal COLOR_RESET);      \
-                        return CODE_ERROR_SIGNAL; }                     \
-                    if (application.args.verbose_given)                 \
-                        PRINT("Ignoring " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
-                    break;                                              \
-                default: break; } } } while (0)
-
-        CONFIGURE_SIGNAL_HANDLER(SIGHUP);
-        CONFIGURE_SIGNAL_HANDLER(SIGINT);
-        CONFIGURE_SIGNAL_HANDLER(SIGQUIT);
-        CONFIGURE_SIGNAL_HANDLER(SIGUSR1);
-        CONFIGURE_SIGNAL_HANDLER(SIGUSR2);
-        CONFIGURE_SIGNAL_HANDLER(SIGALRM);
-        CONFIGURE_SIGNAL_HANDLER(SIGTERM);
-        CONFIGURE_SIGNAL_HANDLER(SIGTSTP);
-        CONFIGURE_SIGNAL_HANDLER(SIGTTIN);
-        CONFIGURE_SIGNAL_HANDLER(SIGTTOU);
-        CONFIGURE_SIGNAL_HANDLER(SIGWINCH);
-
-#undef CONFIGURE_SIGNAL_HANDLER
-
-        if (application.args.verbose_given)
-            PRINT("\n");
     }
 
     //////////////////////

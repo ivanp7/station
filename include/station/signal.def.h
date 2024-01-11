@@ -26,12 +26,12 @@
 #ifndef _STATION_SIGNAL_DEF_H_
 #define _STATION_SIGNAL_DEF_H_
 
+#include <stdbool.h>
+
 /**
- * @brief Generate declarations for a convenient signal processing interface.
+ * @brief Generate declarations for signal management interface.
  *
  * @note This macro is to be used in a header file.
- *
- * @note This macro depends on <stdbool.h>.
  *
  * station_signal_handler_watch_SIGNAL() sets the custom handler for the SIGNAL, so that
  * its state (was it raised or not) can be observed via station_signal_raised_SIGNAL() and
@@ -48,31 +48,31 @@
     bool station_signal_handler_default_##signal(void);
 
 /**
- * @brief Generate definitions for a convenient signal processing interface.
+ * @brief Generate definitions for signal management interface.
  *
- * @note This macro is to be used in a source file,
- * which must include a header with STATION_SIGNAL_SUPPORT_DECLARATION() of the same signal.
+ * @note This macro is to be used together with
+ * STATION_SIGNAL_SUPPORT_DECLARATION() for the same signal.
  *
  * @note This macro depends on <signal.h> and <stdatomic.h>.
  */
 #define STATION_SIGNAL_SUPPORT_DEFINITION(signal)                                   \
-    static atomic_bool station_signal_flag##signal;                                 \
+    static volatile atomic_bool station_signal_flag_##signal;                       \
                                                                                     \
     void station_signal_reset_##signal(void) {                                      \
-        atomic_store_explicit(&station_signal_flag##signal, false,                  \
+        atomic_store_explicit(&station_signal_flag_##signal, false,                 \
                 memory_order_release); }                                            \
                                                                                     \
     bool station_signal_raised_##signal(void) {                                     \
-        return atomic_load_explicit(&station_signal_flag##signal,                   \
+        return atomic_load_explicit(&station_signal_flag_##signal,                  \
                 memory_order_acquire); }                                            \
                                                                                     \
     static void station_signal_handler_##signal(int signo) {                        \
-        if (signo != signal) return;                                                \
-        atomic_store_explicit(&station_signal_flag##signal, true,                   \
+        (void) signo;                                                               \
+        atomic_store_explicit(&station_signal_flag_##signal, true,                  \
                 memory_order_release); }                                            \
                                                                                     \
     bool station_signal_handler_watch_##signal(void) {                              \
-        if (!atomic_is_lock_free(&station_signal_flag##signal)) return false;       \
+        if (!atomic_is_lock_free(&station_signal_flag_##signal)) return false;      \
         station_signal_reset_##signal();                                            \
         struct sigaction act = {.sa_handler = station_signal_handler_##signal};     \
         return (sigaction(signal, &act, (struct sigaction*)NULL) == 0); }           \
