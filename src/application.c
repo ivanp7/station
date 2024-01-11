@@ -636,7 +636,7 @@ static int with_args(void)
         if (application.args.signal##_given) {                          \
             switch (application.args.signal##_arg) {                    \
                 case signal##_arg_watch:                                \
-                    if (!station_signal_handler_watch_##signal()) {     \
+                    if (!station_signal_management_watch_##signal()) {  \
                         ERROR("couldn't set handler for "               \
                                 COLOR_SIGNAL #signal COLOR_RESET);      \
                         return CODE_ERROR_SIGNAL; }                     \
@@ -644,7 +644,7 @@ static int with_args(void)
                         PRINT("Watching " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
                     break;                                              \
                 case signal##_arg_ignore:                               \
-                    if (!station_signal_handler_ignore_##signal()) {    \
+                    if (!station_signal_management_ignore_##signal()) { \
                         ERROR("couldn't ignore "                        \
                                 COLOR_SIGNAL #signal COLOR_RESET);      \
                         return CODE_ERROR_SIGNAL; }                     \
