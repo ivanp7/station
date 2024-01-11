@@ -36,5 +36,13 @@ typedef struct station_state {
     void *data; ///< State data.
 } station_state_t;
 
+/**
+ * @brief Linked list of finite state machine states.
+ */
+typedef struct station_state_chain {
+    station_state_t next_state; ///< Next state.
+    void *data; ///< Current state data.
+} station_state_chain_t;
+
 #endif // _STATION_STATE_TYP_H_
 
