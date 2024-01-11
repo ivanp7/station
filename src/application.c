@@ -8,12 +8,12 @@
 
 #include <station/plugin.typ.h>
 #include <station/plugin.def.h>
-
-#include <station/fsm.fun.h>
-#include <station/fsm.def.h>
-
+#include <station/signal.fun.h>
+#include <station/signal.typ.h>
 #include <station/sdl.typ.h>
 #include <station/opencl.typ.h>
+#include <station/fsm.fun.h>
+#include <station/fsm.def.h>
 
 #include "application_args.h"
 
@@ -21,11 +21,12 @@
 #define CODE_OK 0
 #define CODE_ERROR_GENERAL 1
 #define CODE_ERROR_ARGUMENTS 2
-#define CODE_ERROR_PLUGIN 3
-#define CODE_ERROR_OPENCL 4
-#define CODE_ERROR_FSM 5
-#define CODE_ERROR_FSM_SDL 6
-#define CODE_ERROR_MALLOC 7
+#define CODE_ERROR_SIGNAL 3
+#define CODE_ERROR_PLUGIN 4
+#define CODE_ERROR_OPENCL 5
+#define CODE_ERROR_FSM 6
+#define CODE_ERROR_FSM_SDL 7
+#define CODE_ERROR_MALLOC 8
 #define CODE_ERROR_USER 16
 
 
@@ -115,15 +116,21 @@
 #define COLOR_NUMBER COLOR_FG_BRI_YELLOW
 #define COLOR_FLAG_ON COLOR_FG_GREEN
 #define COLOR_FLAG_OFF COLOR_FG_RED
+#define COLOR_SIGNAL COLOR_FG_BRI_MAGENTA
 #define COLOR_VERSION COLOR_FG_BRI_BLUE
 #define COLOR_OUTPUT_SEGMENT COLOR_FG_BRI_BLACK
 #define COLOR_ERROR COLOR_FG_BRI_RED
 
+#define OUTPUT_SEGMENT_SEPARATOR \
+    "==============================================================================="
+
 #define PRINT(msg) fprintf(stderr, msg)
 #define PRINT_(msg, ...) fprintf(stderr, msg, __VA_ARGS__)
 
-#define ERROR(msg) fprintf(stderr, "\n" COLOR_ERROR "Error" COLOR_RESET ": " msg ".\n")
-#define ERROR_(msg, ...) fprintf(stderr, "\n" COLOR_ERROR "Error" COLOR_RESET ": " msg ".\n", __VA_ARGS__)
+#define ERROR(msg) fprintf(stderr, "\n" COLOR_ERROR "Error" COLOR_RESET \
+        ": " msg ".\n")
+#define ERROR_(msg, ...) fprintf(stderr, "\n" COLOR_ERROR "Error" COLOR_RESET \
+        ": " msg ".\n", __VA_ARGS__)
 
 
 #define STRINGIFY(obj) STRING_OF(obj)
@@ -162,6 +169,8 @@ static struct {
         station_state_t initial_state;
         station_threads_number_t num_threads;
     } fsm;
+
+    station_signal_states_t signal_states;
 } application;
 
 
@@ -175,6 +184,7 @@ static int create_opencl_contexts(
         cl_uint num_platforms, cl_platform_id *platform_list,
         cl_uint *num_devices, cl_device_id **device_list);
 #endif
+
 
 int main(int argc, char *argv[])
 {
@@ -247,10 +257,11 @@ static int with_args(void)
 
         for (unsigned i = 0; i < application.args.conf_given; i++)
         {
-            if (args_parser_config_file(application.args.conf_arg[i], &application.args, &params) != 0)
+            if (args_parser_config_file(application.args.conf_arg[i],
+                        &application.args, &params) != 0)
             {
-                ERROR_("couldn't parse configuration file " COLOR_STRING "%s" COLOR_RESET,
-                        application.args.conf_arg[i]);
+                ERROR_("couldn't parse configuration file "
+                        COLOR_STRING "%s" COLOR_RESET, application.args.conf_arg[i]);
                 return CODE_ERROR_ARGUMENTS;
             }
         }
@@ -333,7 +344,8 @@ static int with_args(void)
             if (separator != NULL)
                 device_mask = separator + 1;
             else
-                separator = application.args.cl_context_arg[i] + strlen(application.args.cl_context_arg[i]);
+                separator = application.args.cl_context_arg[i] +
+                    strlen(application.args.cl_context_arg[i]);
 
             if (separator == application.args.cl_context_arg[i])
             {
@@ -348,7 +360,8 @@ static int with_args(void)
             if (platform_idx_end != separator)
             {
                 ERROR_("OpenCL platform index contains invalid characters: "
-                        COLOR_NUMBER "%.*s" COLOR_RESET " (context argument [" COLOR_NUMBER "%u" COLOR_RESET "])",
+                        COLOR_NUMBER "%.*s" COLOR_RESET " (context argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "])",
                         (int)(separator - application.args.cl_context_arg[i]),
                         application.args.cl_context_arg[i], i);
                 return CODE_ERROR_ARGUMENTS;
@@ -452,10 +465,12 @@ static int with_args(void)
             {
                 char name[256] = {0};
 
-                ret = clGetPlatformInfo(platform_list[platform_idx], CL_PLATFORM_NAME, sizeof(name)-1, name, (size_t*)NULL);
+                ret = clGetPlatformInfo(platform_list[platform_idx],
+                        CL_PLATFORM_NAME, sizeof(name)-1, name, (size_t*)NULL);
                 if (ret != CL_SUCCESS)
                 {
-                    ERROR_("couldn't obtain name of OpenCL platform #" COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+                    ERROR_("couldn't obtain name of OpenCL platform #"
+                            COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
                     free(platform_list);
                     free(device_list);
                     return CODE_ERROR_OPENCL;
@@ -469,7 +484,8 @@ static int with_args(void)
             {
                 cl_uint num_devices;
 
-                ret = clGetDeviceIDs(platform_list[platform_idx], CL_DEVICE_TYPE_DEFAULT, 0, (cl_device_id*)NULL, &num_devices);
+                ret = clGetDeviceIDs(platform_list[platform_idx],
+                        CL_DEVICE_TYPE_DEFAULT, 0, (cl_device_id*)NULL, &num_devices);
                 if (ret != CL_SUCCESS)
                 {
                     ERROR_("couldn't obtain number of OpenCL devices for platform #"
@@ -483,7 +499,8 @@ static int with_args(void)
 
                 if (num_devices > device_list_size)
                 {
-                    cl_device_id *new_device_list = realloc(device_list, sizeof(cl_device_id) * num_devices);
+                    cl_device_id *new_device_list = realloc(device_list,
+                            sizeof(cl_device_id) * num_devices);
                     if (new_device_list == NULL)
                     {
                         ERROR("couldn't allocate OpenCL device list");
@@ -496,7 +513,8 @@ static int with_args(void)
                     device_list = new_device_list;
                 }
 
-                ret = clGetDeviceIDs(platform_list[platform_idx], CL_DEVICE_TYPE_DEFAULT, num_devices, device_list, (cl_uint*)NULL);
+                ret = clGetDeviceIDs(platform_list[platform_idx],
+                        CL_DEVICE_TYPE_DEFAULT, num_devices, device_list, (cl_uint*)NULL);
                 if (ret != CL_SUCCESS)
                 {
                     ERROR_("couldn't obtain OpenCL device list for platform #"
@@ -510,7 +528,8 @@ static int with_args(void)
                 {
                     char name[256] = {0};
 
-                    clGetDeviceInfo(device_list[device_idx], CL_DEVICE_NAME, sizeof(name)-1, name, (size_t*)NULL);
+                    clGetDeviceInfo(device_list[device_idx],
+                            CL_DEVICE_NAME, sizeof(name)-1, name, (size_t*)NULL);
                     if (ret != CL_SUCCESS)
                     {
                         ERROR_("couldn't obtain name of OpenCL device #"
@@ -555,7 +574,8 @@ static int with_args(void)
         PRINT_("Plugin: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.inputs[0]);
         if (application.plugin.argc > 0)
         {
-            PRINT_("  with " COLOR_NUMBER "%i" COLOR_RESET " arguments:\n", application.plugin.argc);
+            PRINT_("  with " COLOR_NUMBER "%i" COLOR_RESET " arguments:\n",
+                    application.plugin.argc);
             for (int i = 0; i < application.plugin.argc; i++)
                 PRINT_("    [" COLOR_NUMBER "%i" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n", i, application.plugin.argv[i]);
@@ -574,7 +594,8 @@ static int with_args(void)
             {
                 for (unsigned i = 0; i < application.args.cl_context_given; i++)
                 {
-                    cl_uint platform_idx = strtoul(application.args.cl_context_arg[i], (char**)NULL, 16);
+                    cl_uint platform_idx = strtoul(
+                            application.args.cl_context_arg[i], (char**)NULL, 16);
 
                     PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
                             "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", i, platform_idx);
@@ -595,6 +616,51 @@ static int with_args(void)
             PRINT("\n");
 #endif
         }
+    }
+
+    ///////////////////////////////
+    // Configure signal handlers //
+    ///////////////////////////////
+
+    if (!application.args.help_given)
+    {
+#define CONFIGURE_SIGNAL_HANDLER(signal) do {                           \
+        if (application.args.signal##_given) {                          \
+            switch (application.args.signal##_arg) {                    \
+                case signal##_arg_watch:                                \
+                    if (!station_signal_handler_watch_##signal()) {     \
+                        ERROR("couldn't set handler for "               \
+                                COLOR_SIGNAL #signal COLOR_RESET);      \
+                        return CODE_ERROR_SIGNAL; }                     \
+                    if (application.args.verbose_given)                 \
+                        PRINT("Watching " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
+                    break;                                              \
+                case signal##_arg_ignore:                               \
+                    if (!station_signal_handler_ignore_##signal()) {    \
+                        ERROR("couldn't ignore "                        \
+                                COLOR_SIGNAL #signal COLOR_RESET);      \
+                        return CODE_ERROR_SIGNAL; }                     \
+                    if (application.args.verbose_given)                 \
+                        PRINT("Ignoring " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
+                    break;                                              \
+                default: break; } } } while (0)
+
+        CONFIGURE_SIGNAL_HANDLER(SIGHUP);
+        CONFIGURE_SIGNAL_HANDLER(SIGINT);
+        CONFIGURE_SIGNAL_HANDLER(SIGQUIT);
+        CONFIGURE_SIGNAL_HANDLER(SIGUSR1);
+        CONFIGURE_SIGNAL_HANDLER(SIGUSR2);
+        CONFIGURE_SIGNAL_HANDLER(SIGALRM);
+        CONFIGURE_SIGNAL_HANDLER(SIGTERM);
+        CONFIGURE_SIGNAL_HANDLER(SIGTSTP);
+        CONFIGURE_SIGNAL_HANDLER(SIGTTIN);
+        CONFIGURE_SIGNAL_HANDLER(SIGTTOU);
+        CONFIGURE_SIGNAL_HANDLER(SIGWINCH);
+
+#undef CONFIGURE_SIGNAL_HANDLER
+
+        if (application.args.verbose_given)
+            PRINT("\n");
     }
 
     //////////////////////
@@ -630,7 +696,8 @@ static int with_plugin(void)
     /////////////////////////
 
     {
-        application.plugin.format = dlsym(application.plugin.handle, STRINGIFY(STATION_PLUGIN_FORMAT_OBJECT));
+        application.plugin.format = dlsym(application.plugin.handle,
+                STRINGIFY(STATION_PLUGIN_FORMAT_OBJECT));
         if (application.plugin.format == NULL)
         {
             ERROR("couldn't obtain plugin format");
@@ -658,7 +725,8 @@ static int with_plugin(void)
     // Obtain plugin vtable //
     //////////////////////////
 
-    application.plugin.vtable = dlsym(application.plugin.handle, STRINGIFY(STATION_PLUGIN_VTABLE_OBJECT));
+    application.plugin.vtable = dlsym(application.plugin.handle,
+            STRINGIFY(STATION_PLUGIN_VTABLE_OBJECT));
     if (application.plugin.vtable == NULL)
     {
         ERROR("couldn't obtain plugin vtable");
@@ -682,14 +750,14 @@ static int with_plugin(void)
         if (application.args.verbose_given)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin help >>>\n");
-            PRINT("===============================================================================\n\n" COLOR_RESET);
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
         }
 
         int code = application.plugin.vtable->help_fn(application.plugin.argc, application.plugin.argv);
 
         if (application.args.verbose_given)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n===============================================================================\n");
+            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
             PRINT("<<< End of plugin help >>>\n" COLOR_RESET);
         }
 
@@ -876,18 +944,19 @@ opencl_cleanup:
         if (application.args.verbose_given)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin initialization >>>\n");
-            PRINT("===============================================================================\n\n" COLOR_RESET);
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
         }
 
         application.plugin.resources = application.plugin.vtable->init_fn(
                 &application.fsm.initial_state, &application.fsm.num_threads,
                 application.sdl.properties_ptr,
                 application.sdl.context_ptr, application.opencl.context_ptr,
+                &application.signal_states,
                 application.plugin.argc, application.plugin.argv);
 
         if (application.args.verbose_given)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n===============================================================================\n");
+            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
             PRINT("<<< End of plugin initialization >>>\n" COLOR_RESET);
         }
     }
@@ -957,14 +1026,14 @@ opencl_cleanup:
         if (application.args.verbose_given)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin finalization >>>\n");
-            PRINT("===============================================================================\n\n" COLOR_RESET);
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
         }
 
         int final_code = application.plugin.vtable->final_fn(application.plugin.resources);
 
         if (application.args.verbose_given)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n===============================================================================\n");
+            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
             PRINT("<<< End of plugin finalization >>>\n" COLOR_RESET);
         }
 
@@ -986,7 +1055,7 @@ static int with_plugin_resources(void)
         if (application.args.verbose_given)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin execution >>>\n");
-            PRINT("===============================================================================\n\n" COLOR_RESET);
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
         }
 
         uint8_t fsm_code;
@@ -999,7 +1068,7 @@ static int with_plugin_resources(void)
 
         if (application.args.verbose_given)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n===============================================================================\n");
+            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
             PRINT("<<< End of plugin execution >>>\n" COLOR_RESET);
         }
 

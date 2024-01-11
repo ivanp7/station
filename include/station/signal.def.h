@@ -40,7 +40,7 @@
  * station_signal_handler_ignore_SIGNAL() makes SIGNAL ignored.
  * station_signal_handler_default_SIGNAL() restores SIGNAL action to the default behavior.
  */
-#define STATION_SIGNAL_SUPPORT_DECLARATION(signal)      \
+#define STATION_SIGNAL_MANAGEMENT_DECLARATION(signal)   \
     void station_signal_reset_##signal(void);           \
     bool station_signal_raised_##signal(void);          \
     bool station_signal_handler_watch_##signal(void);   \
@@ -55,7 +55,7 @@
  *
  * @note This macro depends on <signal.h> and <stdatomic.h>.
  */
-#define STATION_SIGNAL_SUPPORT_DEFINITION(signal)                                   \
+#define STATION_SIGNAL_MANAGEMENT_DEFINITION(signal)                                \
     static volatile atomic_bool station_signal_flag_##signal;                       \
                                                                                     \
     void station_signal_reset_##signal(void) {                                      \

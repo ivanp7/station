@@ -32,6 +32,7 @@ struct station_state;
 struct station_sdl_properties;
 struct station_sdl_context;
 struct station_opencl_context;
+struct station_signal_states;
 
 /**
  * @brief Plugin help function.
@@ -67,6 +68,8 @@ typedef void* (*station_plugin_init_func_t)(
 
         struct station_sdl_context *sdl_context,       ///< [in] SDL context.
         struct station_opencl_context *opencl_context, ///< [in] OpenCL context.
+
+        struct station_signal_states *signal_states, ///< [in] States of supported signals.
 
         int argc,    ///< [in] Number of command line arguments.
         char *argv[] ///< [in] Command line arguments.

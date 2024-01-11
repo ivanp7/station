@@ -19,30 +19,39 @@
 
 /**
  * @file
- * @brief Types of finite state machine states.
+ * @brief Signal management functions.
  */
 
 #pragma once
-#ifndef _STATION_STATE_TYP_H_
-#define _STATION_STATE_TYP_H_
+#ifndef _STATION_SIGNAL_FUN_H_
+#define _STATION_SIGNAL_FUN_H_
 
-#include <station/func.typ.h>
+#include <station/signal.def.h>
+#include <station/func.def.h>
+
+struct station_state;
+struct station_fsm_context;
+
+// Supported signals
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGHUP)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGINT)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGQUIT)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGUSR1)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGUSR2)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGALRM)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTERM)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTSTP)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTTIN)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTTOU)
+STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGWINCH)
 
 /**
- * @brief Finite state machine state.
+ * @brief State function that checks and updates signal states.
+ *
+ * This state function expects station_state_chain_t as state data,
+ * with .data field of it being of type station_signal_states_t.
  */
-typedef struct station_state {
-    station_sfunc_t sfunc; ///< State function.
-    void *data; ///< State data.
-} station_state_t;
+STATION_SFUNC(station_signal_management_sfunc);
 
-/**
- * @brief Chain (linked list) of finite state machine states.
- */
-typedef struct station_state_chain {
-    station_state_t next_state; ///< Next state.
-    void *current_data; ///< Current state data.
-} station_state_chain_t;
-
-#endif // _STATION_STATE_TYP_H_
+#endif // _STATION_SIGNAL_FUN_H_
 

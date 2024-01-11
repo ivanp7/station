@@ -19,30 +19,31 @@
 
 /**
  * @file
- * @brief Types of finite state machine states.
+ * @brief Types for signal management.
  */
 
 #pragma once
-#ifndef _STATION_STATE_TYP_H_
-#define _STATION_STATE_TYP_H_
+#ifndef _STATION_SIGNAL_TYP_H_
+#define _STATION_SIGNAL_TYP_H_
 
-#include <station/func.typ.h>
-
-/**
- * @brief Finite state machine state.
- */
-typedef struct station_state {
-    station_sfunc_t sfunc; ///< State function.
-    void *data; ///< State data.
-} station_state_t;
+#include <stdbool.h>
 
 /**
- * @brief Chain (linked list) of finite state machine states.
+ * @brief States of supported signals.
  */
-typedef struct station_state_chain {
-    station_state_t next_state; ///< Next state.
-    void *current_data; ///< Current state data.
-} station_state_chain_t;
+typedef struct station_signal_states {
+    bool raised_SIGHUP;
+    bool raised_SIGINT;
+    bool raised_SIGQUIT;
+    bool raised_SIGUSR1;
+    bool raised_SIGUSR2;
+    bool raised_SIGALRM;
+    bool raised_SIGTERM;
+    bool raised_SIGTSTP;
+    bool raised_SIGTTIN;
+    bool raised_SIGTTOU;
+    bool raised_SIGWINCH;
+} station_signal_states_t;
 
-#endif // _STATION_STATE_TYP_H_
+#endif // _STATION_SIGNAL_TYP_H_
 

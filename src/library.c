@@ -22,9 +22,11 @@
  * @brief Library implementation.
  */
 
+#include <station/signal.fun.h>
 #include <station/op.fun.h>
 #include <station/fsm.fun.h>
 
+#include <station/signal.typ.h>
 #include <station/state.typ.h>
 #include <station/sdl.typ.h>
 
@@ -36,6 +38,7 @@
 
 #include <threads.h>
 #include <stdatomic.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -66,6 +69,50 @@ struct station_fsm_context {
 
     station_threads_number_t num_threads;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+// signal.fun.h
+///////////////////////////////////////////////////////////////////////////////
+
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGHUP)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGINT)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGQUIT)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGUSR1)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGUSR2)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGALRM)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTERM)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTSTP)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTTIN)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTTOU)
+STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGWINCH)
+
+STATION_SFUNC(station_signal_management_sfunc)
+{
+    (void) context;
+
+    station_state_chain_t *chain = state->data;
+    station_signal_states_t *signal_states = chain->current_data;
+    *state = chain->next_state;
+
+#define MANAGE_SIGNAL(signal)               \
+    if (station_signal_raised_##signal()) { \
+        station_signal_reset_##signal();    \
+        signal_states->raised_##signal = true; }
+
+    MANAGE_SIGNAL(SIGHUP)
+    MANAGE_SIGNAL(SIGINT)
+    MANAGE_SIGNAL(SIGQUIT)
+    MANAGE_SIGNAL(SIGUSR1)
+    MANAGE_SIGNAL(SIGUSR2)
+    MANAGE_SIGNAL(SIGALRM)
+    MANAGE_SIGNAL(SIGTERM)
+    MANAGE_SIGNAL(SIGTSTP)
+    MANAGE_SIGNAL(SIGTTIN)
+    MANAGE_SIGNAL(SIGTTOU)
+    MANAGE_SIGNAL(SIGWINCH)
+
+#undef MANAGE_SIGNAL
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // op.fun.h
