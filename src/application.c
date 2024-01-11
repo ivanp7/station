@@ -188,12 +188,20 @@ static int create_opencl_contexts(
 
 int main(int argc, char *argv[])
 {
-    PRINT(COLOR_RESET "\n" COLOR_FG_BRI_WHITE);
-    PRINT(" ]                                     [\n");
-    PRINT(" ]         Station application         [\n");
-    PRINT(" ] Copyright (C) 2024 by Ivan Podmazov [\n");
-    PRINT(" ]                                     [\n");
-    PRINT(COLOR_RESET "\n");
+    PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
+                                                                \n\
+                          █                                     \n\
+          ▐▌        ▐▌    ▀                                     \n\
+    ▗▟██▖▐███  ▟██▖▐███  ██   ▟█▙ ▐▙██▖      ▟██▖▐▙█▙ ▐▙█▙      \n\
+    ▐▙▄▖▘ ▐▌   ▘▄▟▌ ▐▌    █  ▐▛ ▜▌▐▛ ▐▌      ▘▄▟▌▐▛ ▜▌▐▛ ▜▌     \n\
+     ▀▀█▖ ▐▌  ▗█▀▜▌ ▐▌    █  ▐▌ ▐▌▐▌ ▐▌ ██▌ ▗█▀▜▌▐▌ ▐▌▐▌ ▐▌     \n\
+    ▐▄▄▟▌ ▐▙▄ ▐▙▄█▌ ▐▙▄ ▗▄█▄▖▝█▄█▘▐▌ ▐▌     ▐▙▄█▌▐█▄█▘▐█▄█▘     \n\
+     ▀▀▀   ▀▀  ▀▀▝▘  ▀▀ ▝▀▀▀▘ ▝▀▘ ▝▘ ▝▘      ▀▀▝▘▐▌▀▘ ▐▌▀▘      \n\
+                                                 ▐▌   ▐▌        \n\
+                                                                \n\
+                                                     by Ivan Podmazov\n\
+                                                         (C) 2024\n\
+\n\n" COLOR_RESET);
 
     //////////////////////////////////////////////////
     // Split application and plugin arguments apart //
