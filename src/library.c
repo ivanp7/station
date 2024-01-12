@@ -207,7 +207,7 @@ station_sdl_unlock_texture_and_render(
     return -1;
 #else
     assert(sdl_context != NULL);
-    assert(sdl_context->renderer == NULL);
+    assert(sdl_context->renderer != NULL);
     assert(sdl_context->texture != NULL);
 
     SDL_UnlockTexture(sdl_context->texture);
