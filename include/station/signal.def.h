@@ -66,7 +66,7 @@
         return atomic_load_explicit(&station_signal_flag_##signal,                  \
                 memory_order_acquire); }                                            \
                                                                                     \
-    static void station_signal_management_##signal(int signo) {                     \
+    static void station_signal_handler_##signal(int signo) {                        \
         (void) signo;                                                               \
         atomic_store_explicit(&station_signal_flag_##signal, true,                  \
                 memory_order_release); }                                            \
@@ -74,7 +74,7 @@
     bool station_signal_management_watch_##signal(void) {                           \
         if (!atomic_is_lock_free(&station_signal_flag_##signal)) return false;      \
         station_signal_reset_##signal();                                            \
-        struct sigaction act = {.sa_handler = station_signal_management_##signal};  \
+        struct sigaction act = {.sa_handler = station_signal_handler_##signal};     \
         return (sigaction(signal, &act, (struct sigaction*)NULL) == 0); }           \
                                                                                     \
     bool station_signal_management_ignore_##signal(void) {                          \
