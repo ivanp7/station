@@ -1,51 +1,10 @@
-#include <station/plugin.h>
-#include <station/func.def.h>
+#include "plugin.h"
+
 #include <station/op.fun.h>
-#include <station/signal.fun.h>
-#include <station/signal.typ.h>
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <threads.h>
 #include <unistd.h>
 
-#ifdef STATION_IS_SDL_SUPPORTED
-#  include <SDL.h>
-#endif
-
-#define NUM_TASKS 128
-#define BATCH_SIZE 16
-
-#define TEXTURE_WIDTH 256
-#define TEXTURE_HEIGHT 144
-#define WINDOW_SCALE 4
-
-#define ALARM_DELAY 3
-
-struct plugin_resources {
-    station_signal_set_t *signals;
-
-#ifdef STATION_IS_SDL_SUPPORTED
-    SDL_Event event;
-#endif
-    station_sdl_context_t *sdl_context;
-    station_opencl_context_t *opencl_context;
-
-    int counter;
-    mtx_t counter_mutex;
-
-    bool frozen;
-    bool alarm_set;
-    unsigned frame;
-};
-
-static STATION_PFUNC(pfunc_inc);
-static STATION_PFUNC(pfunc_dec);
-
-static STATION_SFUNC(sfunc_pre);
-static STATION_SFUNC(sfunc_loop);
-static STATION_SFUNC(sfunc_post);
 
 static STATION_PFUNC(pfunc_inc)
 {
@@ -68,6 +27,22 @@ static STATION_PFUNC(pfunc_dec)
     resources->counter -= task_idx;
     mtx_unlock(&resources->counter_mutex);
 }
+
+static STATION_PFUNC(pfunc_draw)
+{
+    (void) thread_idx;
+
+    struct plugin_resources *resources = data;
+
+    station_task_idx_t y = task_idx / TEXTURE_WIDTH;
+    station_task_idx_t x = task_idx % TEXTURE_WIDTH;
+
+    uint32_t pixel = ((x+y) + resources->frame) & 0xFF;
+    pixel = (pixel << 16) | (pixel << 8) | pixel;
+
+    resources->sdl_context->texture_lock_pixels[task_idx] = pixel;
+}
+
 
 static STATION_SFUNC(sfunc_pre)
 {
@@ -126,8 +101,12 @@ static STATION_SFUNC(sfunc_loop)
     if (atomic_load_explicit(&resources->signals->signal_SIGALRM, memory_order_acquire))
     {
         atomic_store_explicit(&resources->signals->signal_SIGALRM, false, memory_order_release);
-        resources->alarm_set = false;
         printf("ALARM!!!\n");
+
+        if (resources->alarm_set)
+            printf("fps = %.1f\n", 1.0f * (resources->frame - resources->prev_frame) / ALARM_DELAY);
+
+        resources->alarm_set = false;
     }
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -136,7 +115,9 @@ static STATION_SFUNC(sfunc_loop)
     {
         printf("Setting an alarm in %d seconds.\n", ALARM_DELAY);
         alarm(ALARM_DELAY);
+
         resources->alarm_set = true;
+        resources->prev_frame = resources->frame;
     }
 
     // Process freeze
@@ -147,36 +128,30 @@ static STATION_SFUNC(sfunc_loop)
     }
 
     // Draw into the window
-    if (station_sdl_lock_texture(resources->sdl_context, (const struct SDL_Rect*)NULL) != 0)
+    if (!resources->frozen)
     {
-        printf("station_sdl_lock_texture() failure\n");
-        state->sfunc = sfunc_post;
-        return;
-    }
-
-    for (unsigned y = 0; y < TEXTURE_HEIGHT; y++)
-        for (unsigned x = 0; x < TEXTURE_WIDTH; x++)
+        if (station_sdl_lock_texture(resources->sdl_context, (const struct SDL_Rect*)NULL) != 0)
         {
-            uint32_t pixel = ((x+y) + resources->frame) & 0xFF;
-
-            pixel = (pixel << 16) | (pixel << 8) | pixel;
-
-            resources->sdl_context->texture_lock_pixels[
-                y * resources->sdl_context->texture_lock_pitch + x] = pixel;
+            printf("station_sdl_lock_texture() failure\n");
+            state->sfunc = sfunc_post;
+            return;
         }
 
-    if (!resources->frozen)
-        resources->frame++;
+        station_execute_pfunc(pfunc_draw, resources,
+                TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, fsm_context);
 
-    if (station_sdl_unlock_texture_and_render(resources->sdl_context) != 0)
-    {
-        printf("station_sdl_unlock_texture_and_render() failure\n");
-        state->sfunc = sfunc_post;
-        return;
+        if (station_sdl_unlock_texture_and_render(resources->sdl_context) != 0)
+        {
+            printf("station_sdl_unlock_texture_and_render() failure\n");
+            state->sfunc = sfunc_post;
+            return;
+        }
+
+        resources->frame++;
     }
 #endif
 
-    thrd_yield();
+    /* thrd_yield(); */
 }
 
 static STATION_SFUNC(sfunc_post)
@@ -193,7 +168,6 @@ static STATION_SFUNC(sfunc_post)
     state->sfunc = NULL;
 }
 
-STATION_PLUGIN_PREAMBLE()
 
 STATION_PLUGIN_HELP(argc, argv)
 {
@@ -250,6 +224,7 @@ STATION_PLUGIN_INIT(plugin_resources, initial_state, fsm_data, num_threads, sign
 
     resources->frozen = false;
     resources->alarm_set = false;
+    resources->prev_frame = 0;
     resources->frame = 0;
 
     *plugin_resources = resources;

@@ -1,5 +1,6 @@
 ROOT = ..
 
+HEADER = plugin.h
 SOURCE = plugin.c
 OUT_PLUGIN = demo.station
 
@@ -9,7 +10,7 @@ CFLAGS = -march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors 
 LFLAGS = $(shell pkg-config --with-path "${ROOT}" --libs station) -fPIC -shared -rdynamic
 
 
-${OUT_PLUGIN}: ${SOURCE}
+${OUT_PLUGIN}: ${HEADER} ${SOURCE}
 	${CC} -o ${OUT_PLUGIN} ${SOURCE} ${CFLAGS} ${LFLAGS}
 
 clean:
