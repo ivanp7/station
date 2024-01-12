@@ -38,17 +38,154 @@
 
 #include <threads.h>
 #include <stdatomic.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <assert.h>
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+#  include <signal.h>
+#  include <pthread.h>
+#  include <time.h>
+#endif
 
 #ifdef STATION_IS_SDL_SUPPORTED
 #  include <SDL.h>
 #  include <SDL_video.h>
 #  include <SDL_render.h>
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+// signal.fun.h
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+
+struct station_signal_management_context
+{
+    pthread_t thread;
+    sigset_t set;
+
+    station_signal_set_t *signals;
+    atomic_bool terminate;
+};
+
+static
+void*
+station_signal_management_thread(
+        void *arg)
+{
+    struct station_signal_management_context *context = arg;
+    assert(context != NULL);
+
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = 1000000}; // 1 ms
+
+    while (!atomic_load_explicit(&context->terminate, memory_order_acquire))
+    {
+        int signal = sigtimedwait(&context->set, (siginfo_t*)NULL, &delay);
+
+#define RAISE_SIGNAL(signal)    \
+        case signal:            \
+            atomic_store_explicit(&context->signals->signal_##signal, true, memory_order_release); \
+            break;
+
+        switch (signal)
+        {
+            RAISE_SIGNAL(SIGHUP)
+            RAISE_SIGNAL(SIGINT)
+            RAISE_SIGNAL(SIGQUIT)
+            RAISE_SIGNAL(SIGUSR1)
+            RAISE_SIGNAL(SIGUSR2)
+            RAISE_SIGNAL(SIGALRM)
+            RAISE_SIGNAL(SIGTERM)
+            RAISE_SIGNAL(SIGTSTP)
+            RAISE_SIGNAL(SIGTTIN)
+            RAISE_SIGNAL(SIGTTOU)
+            RAISE_SIGNAL(SIGWINCH)
+        }
+
+#undef RAISE_SIGNAL
+    }
+
+    return NULL;
+}
+
+#endif
+
+struct station_signal_management_context*
+station_signal_management_thread_start(
+        station_signal_set_t *signals)
+{
+#ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    (void) signals;
+    return NULL;
+#else
+    if (signals == NULL)
+        return NULL;
+
+    struct station_signal_management_context *context = malloc(sizeof(*context));
+    if (context == NULL)
+        return NULL;
+
+    sigemptyset(&context->set);
+
+#define ADD_SIGNAL(signal)                  \
+    if (signals->signal_##signal) {         \
+        signals->signal_##signal = false;   \
+        sigaddset(&context->set, signal); }
+
+    ADD_SIGNAL(SIGHUP)
+    ADD_SIGNAL(SIGINT)
+    ADD_SIGNAL(SIGQUIT)
+    ADD_SIGNAL(SIGUSR1)
+    ADD_SIGNAL(SIGUSR2)
+    ADD_SIGNAL(SIGALRM)
+    ADD_SIGNAL(SIGTERM)
+    ADD_SIGNAL(SIGTSTP)
+    ADD_SIGNAL(SIGTTIN)
+    ADD_SIGNAL(SIGTTOU)
+    ADD_SIGNAL(SIGWINCH)
+
+#undef ADD_SIGNAL
+
+    if (pthread_sigmask(SIG_BLOCK, &context->set, (sigset_t*)NULL) != 0)
+        return NULL;
+
+    context->signals = signals;
+    atomic_init(&context->terminate, false);
+
+    if (pthread_create(&context->thread, NULL, station_signal_management_thread, context) != 0)
+    {
+        pthread_sigmask(SIG_UNBLOCK, &context->set, (sigset_t*)NULL);
+        free(context);
+        return NULL;
+    }
+
+    return context;
+#endif
+}
+
+void
+station_signal_management_thread_stop(
+        struct station_signal_management_context *context)
+{
+#ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    (void) context;
+    return;
+#else
+    if (context == NULL)
+        return;
+
+    atomic_store_explicit(&context->terminate, true, memory_order_release);
+    pthread_join(context->thread, (void**)NULL);
+    pthread_sigmask(SIG_UNBLOCK, &context->set, (sigset_t*)NULL);
+    free(context);
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// op.fun.h
+///////////////////////////////////////////////////////////////////////////////
 
 struct station_fsm_context {
     station_pfunc_t pfunc;
@@ -69,55 +206,6 @@ struct station_fsm_context {
 
     station_threads_number_t num_threads;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-// signal.fun.h
-///////////////////////////////////////////////////////////////////////////////
-
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGHUP)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGINT)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGQUIT)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGUSR1)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGUSR2)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGALRM)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTERM)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTSTP)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTTIN)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGTTOU)
-STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGWINCH)
-
-STATION_SFUNC(station_signal_management_sfunc)
-{
-    (void) fsm_data;
-    (void) fsm_context;
-
-    station_state_chain_t *chain = state->data;
-    station_signal_states_t *signal_states = chain->current_data;
-    *state = chain->next_state;
-
-#define MANAGE_SIGNAL(signal)               \
-    if (station_signal_raised_##signal()) { \
-        station_signal_reset_##signal();    \
-        signal_states->raised_##signal = true; }
-
-    MANAGE_SIGNAL(SIGHUP)
-    MANAGE_SIGNAL(SIGINT)
-    MANAGE_SIGNAL(SIGQUIT)
-    MANAGE_SIGNAL(SIGUSR1)
-    MANAGE_SIGNAL(SIGUSR2)
-    MANAGE_SIGNAL(SIGALRM)
-    MANAGE_SIGNAL(SIGTERM)
-    MANAGE_SIGNAL(SIGTSTP)
-    MANAGE_SIGNAL(SIGTTIN)
-    MANAGE_SIGNAL(SIGTTOU)
-    MANAGE_SIGNAL(SIGWINCH)
-
-#undef MANAGE_SIGNAL
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// op.fun.h
-///////////////////////////////////////////////////////////////////////////////
 
 void
 station_execute_pfunc(

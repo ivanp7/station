@@ -26,24 +26,24 @@
 #ifndef _STATION_SIGNAL_TYP_H_
 #define _STATION_SIGNAL_TYP_H_
 
-#include <stdbool.h>
+#include <stdatomic.h>
 
 /**
- * @brief States of supported signals.
+ * @brief Set of supported signals.
  */
-typedef struct station_signal_states {
-    bool raised_SIGHUP;
-    bool raised_SIGINT;
-    bool raised_SIGQUIT;
-    bool raised_SIGUSR1;
-    bool raised_SIGUSR2;
-    bool raised_SIGALRM;
-    bool raised_SIGTERM;
-    bool raised_SIGTSTP;
-    bool raised_SIGTTIN;
-    bool raised_SIGTTOU;
-    bool raised_SIGWINCH;
-} station_signal_states_t;
+typedef struct station_signal_set {
+    atomic_bool signal_SIGHUP;
+    atomic_bool signal_SIGINT;
+    atomic_bool signal_SIGQUIT;
+    atomic_bool signal_SIGUSR1;
+    atomic_bool signal_SIGUSR2;
+    atomic_bool signal_SIGALRM;
+    atomic_bool signal_SIGTERM;
+    atomic_bool signal_SIGTSTP;
+    atomic_bool signal_SIGTTIN;
+    atomic_bool signal_SIGTTOU;
+    atomic_bool signal_SIGWINCH;
+} station_signal_set_t;
 
 #endif // _STATION_SIGNAL_TYP_H_
 

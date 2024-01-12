@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <dlfcn.h>
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
@@ -30,7 +31,7 @@
 #define CODE_ERROR_USER 16
 
 
-#ifdef STATION_IS_ANSI_ESCAPE_CODES_USED
+#ifdef STATION_IS_ANSI_ESCAPE_CODES_ENABLED
 
 #  define COLOR_RESET         "\033[0m"
 
@@ -141,6 +142,11 @@ static struct {
     struct gengetopt_args_info args;
 
     struct {
+        station_signal_set_t set;
+        struct station_signal_management_context *context;
+    } signal;
+
+    struct {
         int argc;
         char **argv;
 
@@ -170,12 +176,11 @@ static struct {
         void *data;
         station_threads_number_t num_threads;
     } fsm;
-
-    station_signal_states_t signal_states;
 } application;
 
 
 static int with_args(void);
+static int with_signals(void);
 static int with_plugin(void);
 static int with_plugin_context(void);
 static int with_plugin_resources(void);
@@ -306,6 +311,14 @@ static int with_args(void)
     if (application.args.verbose_given)
     {
         PRINT_("Version : " COLOR_VERSION "%u" COLOR_RESET "\n", STATION_PLUGIN_VERSION);
+
+        PRINT("Signals : ");
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+        PRINT(COLOR_FLAG_ON "supported");
+#else
+        PRINT(COLOR_FLAG_OFF "not supported");
+#endif
+        PRINT(COLOR_RESET "\n");
 
         PRINT("SDL     : ");
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -633,51 +646,73 @@ static int with_args(void)
         }
     }
 
-    ///////////////////////////////
-    // Configure signal handlers //
-    ///////////////////////////////
+    ////////////////////////////////////
+    // Start signal management thread //
+    ////////////////////////////////////
 
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     if (!application.args.help_given)
     {
-#define CONFIGURE_SIGNAL_HANDLER(signal) do {                           \
-        if (application.args.signal##_given) {                          \
-            switch (application.args.signal##_arg) {                    \
-                case signal##_arg_watch:                                \
-                    if (!station_signal_management_watch_##signal()) {  \
-                        ERROR("couldn't set handler for "               \
-                                COLOR_SIGNAL #signal COLOR_RESET);      \
-                        return CODE_ERROR_SIGNAL; }                     \
-                    if (application.args.verbose_given)                 \
-                        PRINT("Watching " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
-                    break;                                              \
-                case signal##_arg_ignore:                               \
-                    if (!station_signal_management_ignore_##signal()) { \
-                        ERROR("couldn't ignore "                        \
-                                COLOR_SIGNAL #signal COLOR_RESET);      \
-                        return CODE_ERROR_SIGNAL; }                     \
-                    if (application.args.verbose_given)                 \
-                        PRINT("Ignoring " COLOR_SIGNAL #signal COLOR_RESET ".\n"); \
-                    break;                                              \
-                default: break; } } } while (0)
+        bool thread_needed = false;
 
-        CONFIGURE_SIGNAL_HANDLER(SIGHUP);
-        CONFIGURE_SIGNAL_HANDLER(SIGINT);
-        CONFIGURE_SIGNAL_HANDLER(SIGQUIT);
-        CONFIGURE_SIGNAL_HANDLER(SIGUSR1);
-        CONFIGURE_SIGNAL_HANDLER(SIGUSR2);
-        CONFIGURE_SIGNAL_HANDLER(SIGALRM);
-        CONFIGURE_SIGNAL_HANDLER(SIGTERM);
-        CONFIGURE_SIGNAL_HANDLER(SIGTSTP);
-        CONFIGURE_SIGNAL_HANDLER(SIGTTIN);
-        CONFIGURE_SIGNAL_HANDLER(SIGTTOU);
-        CONFIGURE_SIGNAL_HANDLER(SIGWINCH);
+#define WATCH_SIGNAL(signame)                               \
+        if (application.args.signame##_given) {             \
+            thread_needed = true;                           \
+            application.signal.set.signal_##signame = true; \
+            if (application.args.verbose_given)             \
+                PRINT("Watching " COLOR_SIGNAL #signame COLOR_RESET ".\n"); }
 
-#undef CONFIGURE_SIGNAL_HANDLER
+        WATCH_SIGNAL(SIGHUP)
+        WATCH_SIGNAL(SIGINT)
+        WATCH_SIGNAL(SIGQUIT)
+        WATCH_SIGNAL(SIGUSR1)
+        WATCH_SIGNAL(SIGUSR2)
+        WATCH_SIGNAL(SIGALRM)
+        WATCH_SIGNAL(SIGTERM)
+        WATCH_SIGNAL(SIGTSTP)
+        WATCH_SIGNAL(SIGTTIN)
+        WATCH_SIGNAL(SIGTTOU)
+        WATCH_SIGNAL(SIGWINCH)
 
-        if (application.args.verbose_given)
-            PRINT("\n");
+#undef WATCH_SIGNAL
+
+        if (thread_needed)
+        {
+            if (application.args.verbose_given)
+                PRINT("\n");
+
+            application.signal.context = station_signal_management_thread_start(
+                    &application.signal.set);
+
+            if (application.signal.context == NULL)
+            {
+                ERROR("couldn't configure signal management");
+                return CODE_ERROR_SIGNAL;
+            }
+        }
     }
+#endif
 
+    ///////////////////////////////////
+    // Continue with watched signals //
+    ///////////////////////////////////
+
+    int code = with_signals();
+
+    ///////////////////////////////////
+    // Stop signal management thread //
+    ///////////////////////////////////
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    if (application.signal.context != NULL)
+        station_signal_management_thread_stop(application.signal.context);
+#endif
+    return code;
+}
+
+
+static int with_signals(void)
+{
     //////////////////////
     // Load plugin file //
     //////////////////////
@@ -966,7 +1001,7 @@ opencl_cleanup:
                 &application.fsm.initial_state, &application.fsm.data, &application.fsm.num_threads,
                 application.sdl.properties_ptr,
                 application.sdl.context_ptr, application.opencl.context_ptr,
-                &application.signal_states,
+                &application.signal.set,
                 application.plugin.argc, application.plugin.argv);
 
         if (application.args.verbose_given)

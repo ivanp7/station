@@ -66,15 +66,19 @@ do
             ;;
 
         A) # feature: enable use of ANSI escape codes in application output
-            FEATURE_IS_ANSI_ESCAPE_CODES_USED="true"
+            FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED="true"
             ;;
 
-        S) # feature: enable support for SDL
+        M) # feature: enable support for Simple DirectMedia Layer (SDL)
             FEATURE_IS_SDL_SUPPORTED="true"
             ;;
 
         O) # feature: enable support for OpenCL
             FEATURE_IS_OPENCL_SUPPORTED="true"
+            ;;
+
+        S) # feature: enable signal management support
+            FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED="true"
             ;;
 
         Y) # feature: enable thread yielding
@@ -115,7 +119,8 @@ fi
 
 CFLAGS_COMMON="-pthread $CFLAGS_SDL $CFLAGS_OPENCL \
 ${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
-${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"}"
+${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"} \
+${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:+"-DSTATION_IS_SIGNAL_MANAGEMENT_SUPPORTED"}"
 LFLAGS_COMMON="$LFLAGS_SDL $LFLAGS_OPENCL"
 
 case "${BUILD_TYPE:-}" in
@@ -134,7 +139,7 @@ $CFLAGS_BUILD_TYPE"
 CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
 ${FEATURE_IS_THREAD_YIELD_ENABLED:+"-DSTATION_IS_THREAD_YIELD_ENABLED"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
-${FEATURE_IS_ANSI_ESCAPE_CODES_USED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_USED"}"
+${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"}"
 
 LFLAGS="$LFLAGS_COMMON"
 

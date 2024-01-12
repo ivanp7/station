@@ -31,15 +31,15 @@ option "window-width"  x "SDL window width"  int typestr="SIZE"
 option "window-height" y "SDL window height" int typestr="SIZE"
 
 section "Signal management"
-option "SIGHUP" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGINT" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGQUIT" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGUSR1" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGUSR2" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGALRM" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGTERM" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGTSTP" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGTTIN" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGTTOU" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
-option "SIGWINCH" - "Handle signal" enum typestr="ACTION" values="ignore","watch" default="watch" argoptional
+option "SIGHUP" - "Watch signal"
+option "SIGINT" - "Watch signal"
+option "SIGQUIT" - "Watch signal"
+option "SIGUSR1" - "Watch signal"
+option "SIGUSR2" - "Watch signal"
+option "SIGALRM" - "Watch signal"
+option "SIGTERM" - "Watch signal"
+option "SIGTSTP" - "Watch signal"
+option "SIGTTIN" - "Watch signal"
+option "SIGTTOU" - "Watch signal"
+option "SIGWINCH" - "Watch signal"
 

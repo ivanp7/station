@@ -26,32 +26,32 @@
 #ifndef _STATION_SIGNAL_FUN_H_
 #define _STATION_SIGNAL_FUN_H_
 
-#include <station/signal.def.h>
-#include <station/func.def.h>
-
-struct station_state;
-struct station_fsm_context;
-
-// Supported signals
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGHUP)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGINT)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGQUIT)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGUSR1)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGUSR2)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGALRM)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTERM)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTSTP)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTTIN)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGTTOU)
-STATION_SIGNAL_MANAGEMENT_DECLARATION(SIGWINCH)
+struct station_signal_set;
+struct station_signal_management_context;
 
 /**
- * @brief State function that checks and updates signal states.
+ * @brief Start signal management thread.
  *
- * This state function expects station_state_chain_t as state data,
- * with .data field of it being of type station_signal_states_t.
+ * @warning There should be only one signal management thread per application,
+ * which must be started from the main thread.
+ *
+ * Signals, which fields in the set are false, aren't going to be watched.
+ * The signal states are initialized to false, and set to true upon capture.
+ *
+ * @return Signal management context.
  */
-STATION_SFUNC(station_signal_management_sfunc);
+struct station_signal_management_context*
+station_signal_management_thread_start(
+        struct station_signal_set *signals ///< [in,out] Set of signals to watch.
+);
+
+/**
+ * @brief Stop signal management thread.
+ */
+void
+station_signal_management_thread_stop(
+        struct station_signal_management_context *context ///< [in] Signal management context.
+);
 
 #endif // _STATION_SIGNAL_FUN_H_
 

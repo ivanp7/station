@@ -58,7 +58,7 @@
             struct station_sdl_properties *sdl_properties,          \
             struct station_sdl_context *sdl_context,                \
             struct station_opencl_context *opencl_context,          \
-            struct station_signal_states *signal_states,            \
+            struct station_signal_set *signals,                     \
             int argc, char *argv[]);                                \
     static int station_plugin_final(void *plugin_resources);        \
     station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {        \
@@ -79,7 +79,7 @@
  * @brief Implement plugin initialization function.
  */
 #define STATION_PLUGIN_INIT(initial_state, fsm_data, num_threads, sdl_properties, \
-        sdl_context, opencl_context, signal_states, argc, argv) \
+        sdl_context, opencl_context, signals, argc, argv)       \
     static void* station_plugin_init(                           \
             station_state_t *initial_state,                     \
             void **fsm_data,                                    \
@@ -87,7 +87,7 @@
             station_sdl_properties_t *sdl_properties,           \
             struct station_sdl_context *sdl_context,            \
             struct station_opencl_context *opencl_context,      \
-            struct station_signal_states *signal_states,        \
+            struct station_signal_set *signals,                 \
             int argc, char *argv[])
 
 /**
