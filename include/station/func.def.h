@@ -30,7 +30,7 @@
  * @brief Declarator of a state function of a finite state machine.
  */
 #define STATION_SFUNC(name) \
-    void name(struct station_state *state, struct station_fsm_context *context)
+    void name(struct station_state *state, struct station_fsm_context *fsm_context)
 
 /**
  * @brief Declarator of a parallel processing function of a finite state machine.

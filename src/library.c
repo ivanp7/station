@@ -88,7 +88,7 @@ STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGWINCH)
 
 STATION_SFUNC(station_signal_management_sfunc)
 {
-    (void) context;
+    (void) fsm_context;
 
     station_state_chain_t *chain = state->data;
     station_signal_states_t *signal_states = chain->current_data;
@@ -126,33 +126,33 @@ station_execute_pfunc(
         station_tasks_number_t num_tasks,
         station_tasks_number_t batch_size,
 
-        struct station_fsm_context *context)
+        struct station_fsm_context *fsm_context)
 {
-    assert(context != NULL);
+    assert(fsm_context != NULL);
 
     if ((pfunc == NULL) || (num_tasks == 0))
         return;
 
-    const station_threads_number_t num_threads = context->num_threads;
+    const station_threads_number_t num_threads = fsm_context->num_threads;
 
     if (num_threads > 0)
     {
         if (batch_size == 0)
             batch_size = (num_tasks - 1) / num_threads + 1;
 
-        context->pfunc = pfunc;
-        context->pfunc_data = pfunc_data;
-        context->num_tasks = num_tasks;
-        context->batch_size = batch_size;
+        fsm_context->pfunc = pfunc;
+        fsm_context->pfunc_data = pfunc_data;
+        fsm_context->num_tasks = num_tasks;
+        fsm_context->batch_size = batch_size;
 
-        atomic_store_explicit(&context->done_tasks, 0, memory_order_relaxed);
-        atomic_store_explicit(&context->thread_counter, 0, memory_order_relaxed);
+        atomic_store_explicit(&fsm_context->done_tasks, 0, memory_order_relaxed);
+        atomic_store_explicit(&fsm_context->thread_counter, 0, memory_order_relaxed);
 
-        bool ping_sense = context->ping_sense = !context->ping_sense;
-        bool pong_sense = context->pong_sense = !context->pong_sense;
+        bool ping_sense = fsm_context->ping_sense = !fsm_context->ping_sense;
+        bool pong_sense = fsm_context->pong_sense = !fsm_context->pong_sense;
 
         // Wake slave threads
-        atomic_store_explicit(&context->ping_flag, ping_sense, memory_order_relaxed);
+        atomic_store_explicit(&fsm_context->ping_flag, ping_sense, memory_order_relaxed);
 
         // Wait until all tasks are done
         do
@@ -161,7 +161,7 @@ station_execute_pfunc(
             thrd_yield();
 #endif
         }
-        while (atomic_load_explicit(&context->pong_flag, memory_order_relaxed) != pong_sense);
+        while (atomic_load_explicit(&fsm_context->pong_flag, memory_order_relaxed) != pong_sense);
     }
     else
     {
@@ -230,7 +230,7 @@ station_sdl_unlock_texture_and_render(
 ///////////////////////////////////////////////////////////////////////////////
 
 struct station_thread_context {
-    struct station_fsm_context *context;
+    struct station_fsm_context *fsm_context;
     station_thread_idx_t thread_idx;
 };
 
@@ -239,19 +239,19 @@ int
 station_finite_state_machine_thread(
         void *arg)
 {
-    struct station_fsm_context *context;
+    struct station_fsm_context *fsm_context;
     station_thread_idx_t thread_idx;
     {
         assert(arg != NULL);
         struct station_thread_context *thread_context = arg;
 
-        context = thread_context->context;
+        fsm_context = thread_context->fsm_context;
         thread_idx = thread_context->thread_idx;
 
         free(thread_context);
     }
 
-    const station_threads_number_t thread_counter_last = context->num_threads - 1;
+    const station_threads_number_t thread_counter_last = fsm_context->num_threads - 1;
 
     station_pfunc_t pfunc;
     void *pfunc_data;
@@ -273,20 +273,20 @@ station_finite_state_machine_thread(
             thrd_yield();
 #endif
         }
-        while (atomic_load_explicit(&context->ping_flag, memory_order_relaxed) != ping_sense);
+        while (atomic_load_explicit(&fsm_context->ping_flag, memory_order_relaxed) != ping_sense);
 
-        if (context->terminate)
+        if (fsm_context->terminate)
             break;
 
-        pfunc = context->pfunc;
-        pfunc_data = context->pfunc_data;
+        pfunc = fsm_context->pfunc;
+        pfunc_data = fsm_context->pfunc_data;
 
-        num_tasks = context->num_tasks;
-        batch_size = context->batch_size;
+        num_tasks = fsm_context->num_tasks;
+        batch_size = fsm_context->batch_size;
 
         // Acquire first task
         station_task_idx_t task_idx = atomic_fetch_add_explicit(
-            &context->done_tasks, batch_size, memory_order_relaxed);
+            &fsm_context->done_tasks, batch_size, memory_order_relaxed);
         station_tasks_number_t remaining_tasks = batch_size;
 
         // Loop until no subtasks left
@@ -302,15 +302,15 @@ station_finite_state_machine_thread(
             else
             {
                 task_idx = atomic_fetch_add_explicit(
-                        &context->done_tasks, batch_size, memory_order_relaxed);
+                        &fsm_context->done_tasks, batch_size, memory_order_relaxed);
                 remaining_tasks = batch_size;
             }
         }
 
         // Wake master thread
-        if (atomic_fetch_add_explicit(&context->thread_counter, 1,
+        if (atomic_fetch_add_explicit(&fsm_context->thread_counter, 1,
                     memory_order_relaxed) == thread_counter_last)
-            atomic_store_explicit(&context->pong_flag, pong_sense, memory_order_relaxed);
+            atomic_store_explicit(&fsm_context->pong_flag, pong_sense, memory_order_relaxed);
     }
 
     return 0;
@@ -325,7 +325,7 @@ station_finite_state_machine(
         return STATION_FSM_EXEC_SUCCESS;
 
     // Initialize context
-    struct station_fsm_context context = {
+    struct station_fsm_context fsm_context = {
         .num_threads = num_threads,
     };
 
@@ -354,7 +354,7 @@ station_finite_state_machine(
             goto cleanup;
         }
 
-        thread_context->context = &context;
+        thread_context->fsm_context = &fsm_context;
         thread_context->thread_idx = thread_idx;
 
         thrd_t thread;
@@ -377,12 +377,12 @@ station_finite_state_machine(
 
     // Execute finite state machine
     while (state.sfunc != NULL)
-        state.sfunc(&state, &context);
+        state.sfunc(&state, &fsm_context);
 
 cleanup:
     // Wake slave threads and join
-    context.terminate = true;
-    atomic_store_explicit(&context.ping_flag, !context.ping_sense, memory_order_relaxed);
+    fsm_context.terminate = true;
+    atomic_store_explicit(&fsm_context.ping_flag, !fsm_context.ping_sense, memory_order_relaxed);
 
     for (station_threads_number_t i = 0; i < thread_idx; i++)
         thrd_join(threads[i], (int*)NULL);
