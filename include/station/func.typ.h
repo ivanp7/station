@@ -39,6 +39,7 @@ struct station_fsm_context;
  */
 typedef void (*station_sfunc_t)(
         struct station_state *state, ///< [in,out] Current state.
+        void *fsm_data, ///< [in,out] Finite state machine data.
         struct station_fsm_context *fsm_context ///< [in] Finite state machine context.
 );
 

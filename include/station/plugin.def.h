@@ -53,6 +53,7 @@
     static int station_plugin_help(int argc, char *argv[]);         \
     static void* station_plugin_init(                               \
             struct station_state *initial_state,                    \
+            void **fsm_data,                                        \
             station_threads_number_t *num_threads,                  \
             struct station_sdl_properties *sdl_properties,          \
             struct station_sdl_context *sdl_context,                \
@@ -77,10 +78,11 @@
 /**
  * @brief Implement plugin initialization function.
  */
-#define STATION_PLUGIN_INIT(initial_state, num_threads, sdl_properties, \
+#define STATION_PLUGIN_INIT(initial_state, fsm_data, num_threads, sdl_properties, \
         sdl_context, opencl_context, signal_states, argc, argv) \
     static void* station_plugin_init(                           \
             station_state_t *initial_state,                     \
+            void **fsm_data,                                    \
             station_threads_number_t *num_threads,              \
             station_sdl_properties_t *sdl_properties,           \
             struct station_sdl_context *sdl_context,            \

@@ -167,6 +167,7 @@ static struct {
 
     struct {
         station_state_t initial_state;
+        void *data;
         station_threads_number_t num_threads;
     } fsm;
 
@@ -962,7 +963,7 @@ opencl_cleanup:
         }
 
         application.plugin.resources = application.plugin.vtable->init_fn(
-                &application.fsm.initial_state, &application.fsm.num_threads,
+                &application.fsm.initial_state, &application.fsm.data, &application.fsm.num_threads,
                 application.sdl.properties_ptr,
                 application.sdl.context_ptr, application.opencl.context_ptr,
                 &application.signal_states,
@@ -1075,9 +1076,11 @@ static int with_plugin_resources(void)
         uint8_t fsm_code;
 
         if (application.args.no_sdl_given)
-            fsm_code = station_finite_state_machine(application.fsm.initial_state, application.fsm.num_threads);
+            fsm_code = station_finite_state_machine(
+                    application.fsm.initial_state, application.fsm.data, application.fsm.num_threads);
         else
-            fsm_code = station_finite_state_machine_sdl(application.fsm.initial_state, application.fsm.num_threads,
+            fsm_code = station_finite_state_machine_sdl(
+                    application.fsm.initial_state, application.fsm.data, application.fsm.num_threads,
                     application.sdl.properties_ptr, application.sdl.context_ptr);
 
         if (application.args.verbose_given)

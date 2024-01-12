@@ -88,6 +88,7 @@ STATION_SIGNAL_MANAGEMENT_DEFINITION(SIGWINCH)
 
 STATION_SFUNC(station_signal_management_sfunc)
 {
+    (void) fsm_data;
     (void) fsm_context;
 
     station_state_chain_t *chain = state->data;
@@ -319,6 +320,7 @@ station_finite_state_machine_thread(
 uint8_t
 station_finite_state_machine(
         station_state_t state,
+        void *fsm_data,
         station_threads_number_t num_threads)
 {
     if (state.sfunc == NULL)
@@ -377,7 +379,7 @@ station_finite_state_machine(
 
     // Execute finite state machine
     while (state.sfunc != NULL)
-        state.sfunc(&state, &fsm_context);
+        state.sfunc(&state, fsm_data, &fsm_context);
 
 cleanup:
     // Wake slave threads and join
@@ -395,6 +397,7 @@ cleanup:
 uint8_t
 station_finite_state_machine_sdl(
         station_state_t state,
+        void *fsm_data,
         station_threads_number_t num_threads,
 
         const station_sdl_properties_t *sdl_properties,
@@ -404,7 +407,7 @@ station_finite_state_machine_sdl(
     (void) sdl_properties;
     (void) sdl_context;
 
-    return station_finite_state_machine(state, num_threads);
+    return station_finite_state_machine(state, fsm_data, num_threads);
 #else
     assert(sdl_properties != NULL);
     assert(sdl_context != NULL);
@@ -473,7 +476,7 @@ station_finite_state_machine_sdl(
     sdl_context->texture_height = sdl_properties->texture_height;
 
     // Execute finite state machine
-    result = station_finite_state_machine(state, num_threads);
+    result = station_finite_state_machine(state, fsm_data, num_threads);
 
     // Clear SDL context
     sdl_context->window = NULL;

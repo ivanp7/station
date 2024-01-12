@@ -39,6 +39,7 @@ struct station_sdl_context;
 uint8_t
 station_finite_state_machine(
         station_state_t state, ///< [in] Initial state of finite state machine.
+        void *fsm_data, ///< [in,out] Finite state machine data.
         station_threads_number_t num_threads ///< [in] Number of parallel processing threads.
 );
 
@@ -61,6 +62,7 @@ station_finite_state_machine(
 uint8_t
 station_finite_state_machine_sdl(
         station_state_t state, ///< [in] Initial state of finite state machine.
+        void *fsm_data, ///< [in,out] Finite state machine data.
         station_threads_number_t num_threads, ///< [in] Number of parallel processing threads.
 
         const struct station_sdl_properties *sdl_properties, ///< [in] SDL-related properties of finite state machine.

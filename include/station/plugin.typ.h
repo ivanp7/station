@@ -62,6 +62,7 @@ typedef int (*station_plugin_help_func_t)(
  */
 typedef void* (*station_plugin_init_func_t)(
         struct station_state *initial_state,   ///< [out] Initial state of finite state machine.
+        void **fsm_data,                       ///< [out] Finite state machine data.
         station_threads_number_t *num_threads, ///< [in,out] Number of parallel processing threads.
 
         struct station_sdl_properties *sdl_properties, ///< [in,out] SDL-related properties of a FSM.
