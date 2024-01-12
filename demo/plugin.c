@@ -24,14 +24,13 @@
 #define ALARM_DELAY 3
 
 struct plugin_resources {
-    station_sdl_context_t *sdl_context;
+    station_signal_set_t *signals;
+
 #ifdef STATION_IS_SDL_SUPPORTED
     SDL_Event event;
 #endif
-
+    station_sdl_context_t *sdl_context;
     station_opencl_context_t *opencl_context;
-
-    station_signal_set_t *signals;
 
     int counter;
     mtx_t counter_mutex;
@@ -78,9 +77,7 @@ static STATION_SFUNC(sfunc_pre)
 
     station_execute_pfunc(pfunc_inc, resources, NUM_TASKS, BATCH_SIZE, fsm_context);
 
-    if (resources->counter == (NUM_TASKS * (NUM_TASKS - 1)) / 2)
-        printf("counter has correct value\n");
-    else
+    if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
         printf("counter has incorrect value\n");
 
     state->sfunc = sfunc_loop;
@@ -190,9 +187,7 @@ static STATION_SFUNC(sfunc_post)
 
     station_execute_pfunc(pfunc_dec, resources, NUM_TASKS, BATCH_SIZE, fsm_context);
 
-    if (resources->counter == 0)
-        printf("counter has correct value\n");
-    else
+    if (resources->counter != 0)
         printf("counter has incorrect value\n");
 
     state->sfunc = NULL;
@@ -210,14 +205,25 @@ STATION_PLUGIN_HELP(argc, argv)
     return 0;
 }
 
-STATION_PLUGIN_INIT(initial_state, fsm_data, num_threads, sdl_properties,
-        sdl_context, opencl_context, signals, argc, argv)
+STATION_PLUGIN_INIT(plugin_resources, initial_state, fsm_data, num_threads, signals, sdl_properties,
+        future_sdl_context, future_opencl_context, argc, argv)
 {
     (void) num_threads;
     (void) argc;
     (void) argv;
 
     printf("plugin_init()\n");
+
+    struct plugin_resources *resources = malloc(sizeof(*resources));
+    if (resources == NULL)
+    {
+        printf("malloc() failed\n");
+        return 1;
+    }
+
+    resources->signals = signals;
+    signals->signal_SIGINT = true;
+    signals->signal_SIGTERM = true;
 
     if (sdl_properties != NULL)
     {
@@ -236,16 +242,8 @@ STATION_PLUGIN_INIT(initial_state, fsm_data, num_threads, sdl_properties,
             sdl_properties->window_title = "DEMO";
     }
 
-    struct plugin_resources *resources = malloc(sizeof(*resources));
-    if (resources == NULL)
-    {
-        printf("malloc() failed\n");
-        return NULL;
-    }
-
-    resources->sdl_context = sdl_context;
-    resources->opencl_context = opencl_context;
-    resources->signals = signals;
+    resources->sdl_context = future_sdl_context;
+    resources->opencl_context = future_opencl_context;
 
     resources->counter = 0;
     mtx_init(&resources->counter_mutex, mtx_plain);
@@ -254,10 +252,11 @@ STATION_PLUGIN_INIT(initial_state, fsm_data, num_threads, sdl_properties,
     resources->alarm_set = false;
     resources->frame = 0;
 
+    *plugin_resources = resources;
     initial_state->sfunc = sfunc_pre;
     *fsm_data = resources;
 
-    return resources;
+    return 0;
 }
 
 STATION_PLUGIN_FINAL(plugin_resources)

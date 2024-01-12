@@ -49,6 +49,9 @@ typedef int (*station_plugin_help_func_t)(
 /**
  * @brief Plugin initialization function.
  *
+ * @warning Do not create any threads in this function,
+ * or initialize any resources that can create threads!
+ *
  * This function must initialize plugin:
  * create resources, set initial FSM state,
  * set number of parallel processing threads,
@@ -58,19 +61,23 @@ typedef int (*station_plugin_help_func_t)(
  * SDL context is not to be modified, it is for storage only,
  * so that is can be accessed from state functions later.
  *
- * @return Plugin resources.
+ * If the returned value is not zero, execution is terminated immediately, and
+ * the finalization function won't be called.
+ *
+ * @return Application exit code.
  */
-typedef void* (*station_plugin_init_func_t)(
-        struct station_state *initial_state,   ///< [out] Initial state of finite state machine.
-        void **fsm_data,                       ///< [out] Finite state machine data.
-        station_threads_number_t *num_threads, ///< [in,out] Number of parallel processing threads.
+typedef int (*station_plugin_init_func_t)(
+        void **plugin_resources, ///< [out] Plugin resources.
 
+        struct station_state *initial_state, ///< [out] Initial state of finite state machine.
+        void **fsm_data,                     ///< [out] Finite state machine data.
+
+        station_threads_number_t *num_threads,         ///< [in,out] Number of parallel processing threads.
+        struct station_signal_set *signals,            ///< [in,out] States of supported signals.
         struct station_sdl_properties *sdl_properties, ///< [in,out] SDL-related properties of a FSM.
 
-        struct station_sdl_context *sdl_context,       ///< [in] SDL context.
-        struct station_opencl_context *opencl_context, ///< [in] OpenCL context.
-
-        struct station_signal_set *signals, ///< [in] States of supported signals.
+        struct station_sdl_context *future_sdl_context,       ///< [in] Pointer to future SDL context.
+        struct station_opencl_context *future_opencl_context, ///< [in] Pointer to future OpenCL context.
 
         int argc,    ///< [in] Number of command line arguments.
         char *argv[] ///< [in] Command line arguments.
