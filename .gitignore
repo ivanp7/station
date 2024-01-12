@@ -6,5 +6,6 @@ build.ninja
 *.pc
 
 build
+.gdb_history
 gmon.out
 
