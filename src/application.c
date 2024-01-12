@@ -188,21 +188,6 @@ static int create_opencl_contexts(
 
 int main(int argc, char *argv[])
 {
-    PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
-                                                                \n\
-                          █                                     \n\
-          ▐▌        ▐▌    ▀                                     \n\
-    ▗▟██▖▐███  ▟██▖▐███  ██   ▟█▙ ▐▙██▖      ▟██▖▐▙█▙ ▐▙█▙      \n\
-    ▐▙▄▖▘ ▐▌   ▘▄▟▌ ▐▌    █  ▐▛ ▜▌▐▛ ▐▌      ▘▄▟▌▐▛ ▜▌▐▛ ▜▌     \n\
-     ▀▀█▖ ▐▌  ▗█▀▜▌ ▐▌    █  ▐▌ ▐▌▐▌ ▐▌ ██▌ ▗█▀▜▌▐▌ ▐▌▐▌ ▐▌     \n\
-    ▐▄▄▟▌ ▐▙▄ ▐▙▄█▌ ▐▙▄ ▗▄█▄▖▝█▄█▘▐▌ ▐▌     ▐▙▄█▌▐█▄█▘▐█▄█▘     \n\
-     ▀▀▀   ▀▀  ▀▀▝▘  ▀▀ ▝▀▀▀▘ ▝▀▘ ▝▘ ▝▘      ▀▀▝▘▐▌▀▘ ▐▌▀▘      \n\
-                                                 ▐▌   ▐▌        \n\
-                                                                \n\
-                                                     by Ivan Podmazov\n\
-                                                         (C) 2024\n\
-\n\n" COLOR_RESET);
-
     //////////////////////////////////////////////////
     // Split application and plugin arguments apart //
     //////////////////////////////////////////////////
@@ -231,6 +216,27 @@ int main(int argc, char *argv[])
         args_parser_free(&application.args);
         return CODE_ERROR_ARGUMENTS;
     }
+
+    //////////////////////
+    // Display the logo //
+    //////////////////////
+
+    if (!application.args.no_logo_given)
+        PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
+                                                                \n\
+                          █                                     \n\
+          ▐▌        ▐▌    ▀                                     \n\
+    ▗▟██▖▐███  ▟██▖▐███  ██   ▟█▙ ▐▙██▖      ▟██▖▐▙█▙ ▐▙█▙      \n\
+    ▐▙▄▖▘ ▐▌   ▘▄▟▌ ▐▌    █  ▐▛ ▜▌▐▛ ▐▌      ▘▄▟▌▐▛ ▜▌▐▛ ▜▌     \n\
+     ▀▀█▖ ▐▌  ▗█▀▜▌ ▐▌    █  ▐▌ ▐▌▐▌ ▐▌ ██▌ ▗█▀▜▌▐▌ ▐▌▐▌ ▐▌     \n\
+    ▐▄▄▟▌ ▐▙▄ ▐▙▄█▌ ▐▙▄ ▗▄█▄▖▝█▄█▘▐▌ ▐▌     ▐▙▄█▌▐█▄█▘▐█▄█▘     \n\
+     ▀▀▀   ▀▀  ▀▀▝▘  ▀▀ ▝▀▀▀▘ ▝▀▘ ▝▘ ▝▘      ▀▀▝▘▐▌▀▘ ▐▌▀▘      \n\
+                                                 ▐▌   ▐▌        \n\
+                                                                \n\
+                                                     by Ivan Podmazov\n\
+                                                         (C) 2024\n\
+\n\n" COLOR_RESET);
+
 
     ////////////////////////////////////
     // Continue with parsed arguments //

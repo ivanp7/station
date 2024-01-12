@@ -13,6 +13,7 @@ args "--conf-parser --default-optional --no-handle-error --no-help --no-version 
 option "conf" F "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
 
 section "Output options"
+option "no-logo" - "Don't display application logo"
 option "verbose" v "Display more information"
 option "cl-list" l "Display list of OpenCL platforms (provide twice to display devices of each platform)" multiple
 
