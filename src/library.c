@@ -217,9 +217,7 @@ station_execute_pfunc(
 
         struct station_fsm_context *fsm_context)
 {
-    assert(fsm_context != NULL);
-
-    if ((pfunc == NULL) || (num_tasks == 0))
+    if ((pfunc == NULL) || (num_tasks == 0) || (fsm_context == NULL))
         return;
 
     const station_threads_number_t num_threads = fsm_context->num_threads;
@@ -267,11 +265,12 @@ station_sdl_lock_texture(
 #ifndef STATION_IS_SDL_SUPPORTED
     (void) sdl_context;
     (void) rectangle;
+
     return -1;
 #else
-    assert(sdl_context != NULL);
-    assert(sdl_context->texture != NULL);
-    assert(sdl_context->texture_lock_pixels == NULL);
+    if ((sdl_context == NULL) || (sdl_context->texture == NULL) ||
+            (sdl_context->texture_lock_pixels == NULL))
+        return 1;
 
     void *pixels;
     int pitch;
@@ -295,9 +294,9 @@ station_sdl_unlock_texture_and_render(
     (void) sdl_context;
     return -1;
 #else
-    assert(sdl_context != NULL);
-    assert(sdl_context->renderer != NULL);
-    assert(sdl_context->texture != NULL);
+    if ((sdl_context == NULL) || (sdl_context->renderer == NULL) ||
+            (sdl_context->texture == NULL))
+        return 1;
 
     SDL_UnlockTexture(sdl_context->texture);
 
@@ -331,8 +330,8 @@ station_finite_state_machine_thread(
     struct station_fsm_context *fsm_context;
     station_thread_idx_t thread_idx;
     {
-        assert(arg != NULL);
         struct station_thread_context *thread_context = arg;
+        assert(thread_context != NULL);
 
         fsm_context = thread_context->fsm_context;
         thread_idx = thread_context->thread_idx;
@@ -497,10 +496,8 @@ station_finite_state_machine_sdl(
 
     return station_finite_state_machine(state, fsm_data, num_threads);
 #else
-    assert(sdl_properties != NULL);
-    assert(sdl_context != NULL);
-
-    if ((sdl_properties->texture_width == 0) || (sdl_properties->texture_height == 0))
+    if ((sdl_context == NULL) || (sdl_properties == NULL) ||
+            (sdl_properties->texture_width == 0) || (sdl_properties->texture_height == 0))
         return STATION_FSM_EXEC_INCORRECT_INPUTS;
 
     // Initialize SDL and resources
