@@ -3,9 +3,13 @@ version "1.0"
 versiontext "Copyright (C) 2024 by Ivan Podmazov"
 
 usage "
+
 station-app [options...] PLUGIN_FILE [-- [plugin options...]]
     or
-station-app --help"
+station-app --help [PLUGIN_FILE [-- [plugin help options...]]]
+    or
+station-app --cl-list[=TYPE]
+"
 
 args "--conf-parser --default-optional --no-handle-error --no-help --no-version --unnamed-opts=PLUGIN_FILE"
 
@@ -15,31 +19,33 @@ option "conf" F "Parse arguments from file (multiple allowed)" string typestr="F
 section "Output options"
 option "no-logo" - "Don't display application logo"
 option "verbose" v "Display more information"
-option "cl-list" l "Display list of OpenCL platforms (provide twice to display devices of each platform)" multiple
+
+section "Alternative modes"
+option "help" h "Display usage help for app or plugin"
+option "cl-list" l "Display list of OpenCL platforms/devices" enum typestr="TYPE" values="platforms","devices" default="devices" argoptional
 
 section "Execution options"
-option "help" h "Display usage help for app or plugin, don't run"
 option "threads" j "Number of parallel processing threads" int typestr="THREADS"
 option "cl-context" c "Create OpenCL context (multiple allowed)" string typestr="PLATFORM_IDX[:DEVICE_IDX_MASK]" multiple
 option "no-sdl" n "Don't provide SDL context"
 
-section "Window options"
-option "window-shown" w "Make SDL window shown upon creation"
-option "window-resizable" r "Make SDL window resizable"
-option "window-title" t "SDL window title" string
-option "window-width"  x "SDL window width"  int typestr="SIZE"
-option "window-height" y "SDL window height" int typestr="SIZE"
+section "SDL options"
+option "window-width"  x "Window width"  int typestr="SIZE"
+option "window-height" y "Window height" int typestr="SIZE"
+option "window-resizable" r "Make window resizable"
+option "window-shown" w "Show window after creation"
+option "window-title" t "Window title" string
 
 section "Signal management"
-option "SIGHUP" - "Watch signal"
-option "SIGINT" - "Watch signal"
-option "SIGQUIT" - "Watch signal"
-option "SIGUSR1" - "Watch signal"
-option "SIGUSR2" - "Watch signal"
-option "SIGALRM" - "Watch signal"
-option "SIGTERM" - "Watch signal"
-option "SIGTSTP" - "Watch signal"
-option "SIGTTIN" - "Watch signal"
-option "SIGTTOU" - "Watch signal"
-option "SIGWINCH" - "Watch signal"
+option "SIGHUP" - "Watch signal #1"
+option "SIGINT" - "Watch signal #2"
+option "SIGQUIT" - "Watch signal #3"
+option "SIGUSR1" - "Watch signal #10"
+option "SIGUSR2" - "Watch signal #12"
+option "SIGALRM" - "Watch signal #14"
+option "SIGTERM" - "Watch signal #15"
+option "SIGTSTP" - "Watch signal #20"
+option "SIGTTIN" - "Watch signal #21"
+option "SIGTTOU" - "Watch signal #22"
+option "SIGWINCH" - "Watch signal #28"
 

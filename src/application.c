@@ -142,11 +142,6 @@ static struct {
     struct gengetopt_args_info args;
 
     struct {
-        station_signal_set_t set;
-        struct station_signal_management_context *context;
-    } signal;
-
-    struct {
         int argc;
         char **argv;
 
@@ -159,16 +154,18 @@ static struct {
     } plugin;
 
     struct {
-        station_sdl_properties_t properties;
-        station_sdl_properties_t *properties_ptr;
+        station_signal_set_t set, *set_ptr;
+        struct station_signal_management_context *management_context;
+    } signal;
 
-        station_sdl_context_t context;
-        station_sdl_context_t *context_ptr;
+    struct {
+        station_sdl_properties_t properties, *properties_ptr;
+        station_sdl_context_t context, *context_ptr;
     } sdl;
 
     struct {
-        station_opencl_context_t context;
-        station_opencl_context_t *context_ptr;
+        bool not_needed;
+        station_opencl_context_t context, *context_ptr;
     } opencl;
 
     struct {
@@ -194,6 +191,23 @@ static int create_opencl_contexts(
 
 int main(int argc, char *argv[])
 {
+    ///////////////////////////////////
+    // Initialize supported features //
+    ///////////////////////////////////
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    application.signal.set_ptr = &application.signal.set;
+#endif
+
+#ifdef STATION_IS_SDL_SUPPORTED
+    application.sdl.properties_ptr = &application.sdl.properties;
+    application.sdl.context_ptr = &application.sdl.context;
+#endif
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+    application.opencl.context_ptr = &application.opencl.context;
+#endif
+
     //////////////////////////////////////////////////
     // Split application and plugin arguments apart //
     //////////////////////////////////////////////////
@@ -223,44 +237,6 @@ int main(int argc, char *argv[])
         return CODE_ERROR_ARGUMENTS;
     }
 
-    //////////////////////
-    // Display the logo //
-    //////////////////////
-
-    if (!application.args.no_logo_given)
-        PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
-                                                                \n\
-                          █                                     \n\
-          ▐▌        ▐▌    ▀                                     \n\
-    ▗▟██▖▐███  ▟██▖▐███  ██   ▟█▙ ▐▙██▖      ▟██▖▐▙█▙ ▐▙█▙      \n\
-    ▐▙▄▖▘ ▐▌   ▘▄▟▌ ▐▌    █  ▐▛ ▜▌▐▛ ▐▌      ▘▄▟▌▐▛ ▜▌▐▛ ▜▌     \n\
-     ▀▀█▖ ▐▌  ▗█▀▜▌ ▐▌    █  ▐▌ ▐▌▐▌ ▐▌ ██▌ ▗█▀▜▌▐▌ ▐▌▐▌ ▐▌     \n\
-    ▐▄▄▟▌ ▐▙▄ ▐▙▄█▌ ▐▙▄ ▗▄█▄▖▝█▄█▘▐▌ ▐▌     ▐▙▄█▌▐█▄█▘▐█▄█▘     \n\
-     ▀▀▀   ▀▀  ▀▀▝▘  ▀▀ ▝▀▀▀▘ ▝▀▘ ▝▘ ▝▘      ▀▀▝▘▐▌▀▘ ▐▌▀▘      \n\
-                                                 ▐▌   ▐▌        \n\
-                                                                \n\
-                                                     by Ivan Podmazov\n\
-                                                         (C) 2024\n\
-\n\n" COLOR_RESET);
-
-
-    ////////////////////////////////////
-    // Continue with parsed arguments //
-    ////////////////////////////////////
-
-    int code = with_args();
-
-    ///////////////////////////////////
-    // Release application arguments //
-    ///////////////////////////////////
-
-    args_parser_free(&application.args);
-    return code;
-}
-
-
-static int with_args(void)
-{
     ///////////////////////////////
     // Parse configuration files //
     ///////////////////////////////
@@ -280,29 +256,59 @@ static int with_args(void)
             if (args_parser_config_file(application.args.conf_arg[i],
                         &application.args, &params) != 0)
             {
-                ERROR_("couldn't parse configuration file "
+                ERROR_("couldn't parse arguments from file "
                         COLOR_STRING "%s" COLOR_RESET, application.args.conf_arg[i]);
+                args_parser_free(&application.args);
                 return CODE_ERROR_ARGUMENTS;
             }
         }
     }
 
-    ////////////////////////////////////////
-    // Assign default values to arguments //
-    ////////////////////////////////////////
+    ////////////////////////////////////
+    // Continue with parsed arguments //
+    ////////////////////////////////////
 
-    if (!application.args.threads_given)
-        application.args.threads_arg = 0;
+    int code = with_args();
 
-#ifdef STATION_IS_SDL_SUPPORTED
-    if (!application.args.window_width_given)
-        application.args.window_width_arg = 0;
+    ///////////////////////////////////
+    // Release application arguments //
+    ///////////////////////////////////
 
-    if (!application.args.window_height_given)
-        application.args.window_height_arg = 0;
-#else
-    application.args.no_sdl_given = 1;
-#endif
+    bool verbose = application.args.verbose_given;
+    args_parser_free(&application.args);
+
+    /////////////////////////
+    // Print final message //
+    /////////////////////////
+
+    if (verbose)
+        PRINT("\nApplication terminated normally.\n");
+
+    return code;
+}
+
+
+static int with_args(void)
+{
+    //////////////////////
+    // Display the logo //
+    //////////////////////
+
+    if (!application.args.no_logo_given)
+        PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
+                                                                \n\
+                          █                                     \n\
+          ▐▌        ▐▌    ▀                                     \n\
+    ▗▟██▖▐███  ▟██▖▐███  ██   ▟█▙ ▐▙██▖      ▟██▖▐▙█▙ ▐▙█▙      \n\
+    ▐▙▄▖▘ ▐▌   ▘▄▟▌ ▐▌    █  ▐▛ ▜▌▐▛ ▐▌      ▘▄▟▌▐▛ ▜▌▐▛ ▜▌     \n\
+     ▀▀█▖ ▐▌  ▗█▀▜▌ ▐▌    █  ▐▌ ▐▌▐▌ ▐▌ ██▌ ▗█▀▜▌▐▌ ▐▌▐▌ ▐▌     \n\
+    ▐▄▄▟▌ ▐▙▄ ▐▙▄█▌ ▐▙▄ ▗▄█▄▖▝█▄█▘▐▌ ▐▌     ▐▙▄█▌▐█▄█▘▐█▄█▘     \n\
+     ▀▀▀   ▀▀  ▀▀▝▘  ▀▀ ▝▀▀▀▘ ▝▀▘ ▝▘ ▝▘      ▀▀▝▘▐▌▀▘ ▐▌▀▘      \n\
+                                                 ▐▌   ▐▌        \n\
+                                                                \n\
+                                                     by Ivan Podmazov\n\
+                                                         (C) 2024\n\
+\n\n" COLOR_RESET);
 
     /////////////////////////////////////////////////////
     // Display application version and feature support //
@@ -339,11 +345,53 @@ static int with_args(void)
         PRINT("\n");
     }
 
+    ////////////////////////////////////////
+    // Assign default values to arguments //
+    ////////////////////////////////////////
+
+    if (!application.args.threads_given)
+        application.args.threads_arg = 0;
+
+#ifdef STATION_IS_SDL_SUPPORTED
+    if (!application.args.window_width_given)
+        application.args.window_width_arg = 0;
+
+    if (!application.args.window_height_given)
+        application.args.window_height_arg = 0;
+#endif
+
     ////////////////////////////////////////////////
     // Check correctness of application arguments //
     ////////////////////////////////////////////////
 
-    if (!application.args.help_given)
+    if (application.args.cl_list_given)
+    {
+        if (application.args.inputs_num != 0)
+        {
+            ERROR("processing a plugin file while displaying list of OpenCL platforms/devices is not supported");
+            return CODE_ERROR_ARGUMENTS;
+        }
+
+        if (application.args.help_given)
+        {
+            ERROR("displaying list of OpenCL platforms/devices is mutually exclusive with help mode");
+            return CODE_ERROR_ARGUMENTS;
+        }
+    }
+    else if (application.args.help_given)
+    {
+        if (application.args.inputs_num > 1)
+        {
+            ERROR("cannot process more than one plugin file");
+            return CODE_ERROR_ARGUMENTS;
+        }
+        else if (application.args.inputs_num == 0)
+        {
+            args_parser_print_help();
+            return CODE_OK;
+        }
+    }
+    else
     {
         if (application.args.inputs_num > 1)
         {
@@ -358,12 +406,6 @@ static int with_args(void)
         }
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-        if (application.args.cl_list_given > 2)
-        {
-            ERROR("unsupported OpenCL platform list type (too many list arguments)");
-            return CODE_ERROR_ARGUMENTS;
-        }
-
         for (unsigned i = 0; i < application.args.cl_context_given; i++)
         {
             const char *separator = strchr(application.args.cl_context_arg[i], ':');
@@ -436,19 +478,6 @@ static int with_args(void)
         }
 #endif
     }
-    else
-    {
-        if (application.args.inputs_num > 1)
-        {
-            ERROR("cannot process more than one plugin file");
-            return CODE_ERROR_ARGUMENTS;
-        }
-        else if (application.args.inputs_num == 0)
-        {
-            args_parser_print_help();
-            return CODE_OK;
-        }
-    }
 
     //////////////////////////////////////////////
     // Display list of OpenCL platforms/devices //
@@ -508,7 +537,7 @@ static int with_args(void)
                         COLOR_STRING "%s" COLOR_RESET "\n", platform_idx, name);
             }
 
-            if (application.args.cl_list_given >= 2)
+            if (application.args.cl_list_arg == cl_list_arg_devices)
             {
                 cl_uint num_devices;
 
@@ -574,10 +603,10 @@ static int with_args(void)
             }
         }
 
-        PRINT("\n");
-
         free(platform_list);
         free(device_list);
+
+        return CODE_OK;
     }
 #endif
 
@@ -612,38 +641,6 @@ static int with_args(void)
             PRINT("  with no arguments\n");
 
         PRINT("\n");
-
-        if (!application.args.help_given)
-        {
-#ifdef STATION_IS_OPENCL_SUPPORTED
-            PRINT_("OpenCL contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
-                    application.args.cl_context_given);
-            if (application.args.cl_context_given)
-            {
-                for (unsigned i = 0; i < application.args.cl_context_given; i++)
-                {
-                    cl_uint platform_idx = strtoul(
-                            application.args.cl_context_arg[i], (char**)NULL, 16);
-
-                    PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
-                            "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", i, platform_idx);
-
-                    const char *device_mask = strchr(application.args.cl_context_arg[i], ':');
-                    if (device_mask != NULL)
-                        device_mask++;
-
-                    if (device_mask == NULL)
-                        PRINT("all devices");
-                    else
-                        PRINT_("device mask " COLOR_NUMBER "%s" COLOR_RESET, device_mask);
-
-                    PRINT("\n");
-                }
-            }
-
-            PRINT("\n");
-#endif
-        }
     }
 
     //////////////////////
@@ -668,6 +665,7 @@ static int with_args(void)
     ////////////////////////
 
     dlclose(application.plugin.handle);
+
     return code;
 }
 
@@ -747,71 +745,63 @@ static int with_plugin(void)
         return code;
     }
 
-    //////////////////////////////////////////////////////////
-    // Prepare arguments for plugin initialization function //
-    //////////////////////////////////////////////////////////
-
-    // Number of parallel processing threads
-    application.fsm.num_threads = application.args.threads_arg;
-
-    // Set of watched signals
-#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-
-#define ENABLE_SIGNAL(signame)              \
-    if (application.args.signame##_given)   \
-        application.signal.set.signal_##signame = true;
-
-        ENABLE_SIGNAL(SIGHUP)
-        ENABLE_SIGNAL(SIGINT)
-        ENABLE_SIGNAL(SIGQUIT)
-        ENABLE_SIGNAL(SIGUSR1)
-        ENABLE_SIGNAL(SIGUSR2)
-        ENABLE_SIGNAL(SIGALRM)
-        ENABLE_SIGNAL(SIGTERM)
-        ENABLE_SIGNAL(SIGTSTP)
-        ENABLE_SIGNAL(SIGTTIN)
-        ENABLE_SIGNAL(SIGTTOU)
-        ENABLE_SIGNAL(SIGWINCH)
-
-#undef ENABLE_SIGNAL
-
-#endif
-
-    // SDL properties and pointer to future SDL context
-#ifdef STATION_IS_SDL_SUPPORTED
-    if (!application.args.no_sdl_given)
     {
-        application.sdl.properties.window_width = application.args.window_width_arg;
-        application.sdl.properties.window_height = application.args.window_height_arg;
-        application.sdl.properties.window_shown = application.args.window_shown_given;
-        application.sdl.properties.window_resizable = application.args.window_resizable_given;
-        application.sdl.properties.window_title = application.args.window_title_arg;
+        //////////////////////////////////////////////////////////
+        // Prepare arguments for plugin initialization function //
+        //////////////////////////////////////////////////////////
 
-        application.sdl.properties_ptr = &application.sdl.properties;
-        application.sdl.context_ptr = &application.sdl.context;
-    }
-#endif
+        if (application.signal.set_ptr != NULL)
+        {
+#define WATCH_SIGNAL(signame)                       \
+            if (application.args.signame##_given)   \
+                application.signal.set.signal_##signame = true;
 
-    // Pointer to future OpenCL context
-#ifdef STATION_IS_OPENCL_SUPPORTED
-    application.opencl.context_ptr = &application.opencl.context;
-#endif
+            WATCH_SIGNAL(SIGHUP)
+            WATCH_SIGNAL(SIGINT)
+            WATCH_SIGNAL(SIGQUIT)
+            WATCH_SIGNAL(SIGUSR1)
+            WATCH_SIGNAL(SIGUSR2)
+            WATCH_SIGNAL(SIGALRM)
+            WATCH_SIGNAL(SIGTERM)
+            WATCH_SIGNAL(SIGTSTP)
+            WATCH_SIGNAL(SIGTTIN)
+            WATCH_SIGNAL(SIGTTOU)
+            WATCH_SIGNAL(SIGWINCH)
 
-    ///////////////////////
-    // Initialize plugin //
-    ///////////////////////
+#undef WATCH_SIGNAL
+        }
 
-    {
+        if (application.args.no_sdl_given)
+            application.sdl.properties_ptr = NULL;
+
+        if (application.sdl.properties_ptr != NULL)
+        {
+            application.sdl.properties.window_width = application.args.window_width_arg;
+            application.sdl.properties.window_height = application.args.window_height_arg;
+            application.sdl.properties.window_resizable = application.args.window_resizable_given;
+            application.sdl.properties.window_shown = application.args.window_shown_given;
+            application.sdl.properties.window_title = application.args.window_title_arg;
+        }
+
+        station_plugin_init_func_args_t plugin_init_func_args = {
+            .fsm_num_threads = application.args.threads_arg,
+            .signals = application.signal.set_ptr,
+            .sdl_properties = application.sdl.properties_ptr,
+            .future_sdl_context = application.sdl.context_ptr,
+            .future_opencl_context = application.opencl.context_ptr,
+        };
+
+        ///////////////////////
+        // Initialize plugin //
+        ///////////////////////
+
         if (application.args.verbose_given)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin initialization >>>\n");
             PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
         }
 
-        int init_code = application.plugin.vtable->init_fn(&application.plugin.resources,
-                &application.fsm.initial_state, &application.fsm.data, &application.fsm.num_threads,
-                &application.signal.set, application.sdl.properties_ptr,
-                application.sdl.context_ptr, application.opencl.context_ptr,
+        int init_code = application.plugin.vtable->init_fn(&plugin_init_func_args,
                 application.plugin.argc, application.plugin.argv);
 
         if (application.args.verbose_given)
@@ -822,23 +812,40 @@ static int with_plugin(void)
 
         if (init_code != 0)
             return CODE_ERROR_USER + init_code;
+
+        ///////////////////////////////////////////////////////
+        // Configure the application as the plugin specified //
+        ///////////////////////////////////////////////////////
+
+        application.plugin.resources = plugin_init_func_args.plugin_resources;
+
+        application.fsm.initial_state = plugin_init_func_args.fsm_initial_state;
+        application.fsm.data = plugin_init_func_args.fsm_data;
+        application.fsm.num_threads = plugin_init_func_args.fsm_num_threads;
+
+        if (plugin_init_func_args.signals_not_needed)
+            application.signal.set_ptr = NULL;
+
+        if (plugin_init_func_args.sdl_not_needed)
+            application.sdl.properties_ptr = NULL;
+
+        if (plugin_init_func_args.opencl_not_needed)
+            application.opencl.not_needed = true;
+
+        /////////////////////////////////////////
+        // Assign default values to properties //
+        /////////////////////////////////////////
+
+        if (application.sdl.properties_ptr != NULL)
+        {
+            if (application.sdl.properties.window_title == NULL)
+                application.sdl.properties.window_title = application.args.inputs[0];
+        }
     }
 
-    /////////////////////////////////////////
-    // Assign default values to properties //
-    /////////////////////////////////////////
-
-#ifdef STATION_IS_SDL_SUPPORTED
-    if (!application.args.no_sdl_given)
-    {
-        if (application.sdl.properties.window_title == NULL)
-            application.sdl.properties.window_title = application.args.inputs[0];
-    }
-#endif
-
-    ////////////////////////
-    // Display properties //
-    ////////////////////////
+    ///////////////////////////////////////
+    // Display application configuration //
+    ///////////////////////////////////////
 
     if (application.args.verbose_given)
     {
@@ -846,38 +853,38 @@ static int with_plugin(void)
 
         PRINT_("Threads : " COLOR_NUMBER "%u" COLOR_RESET "\n", application.fsm.num_threads);
 
-#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-        PRINT("Signals :");
-
-#  define PRINT_SIGNAL(signame)                         \
-        if (application.signal.set.signal_##signame)    \
-            PRINT(" " COLOR_SIGNAL #signame COLOR_RESET);
-
-        PRINT_SIGNAL(SIGHUP)
-        PRINT_SIGNAL(SIGINT)
-        PRINT_SIGNAL(SIGQUIT)
-        PRINT_SIGNAL(SIGUSR1)
-        PRINT_SIGNAL(SIGUSR2)
-        PRINT_SIGNAL(SIGALRM)
-        PRINT_SIGNAL(SIGTERM)
-        PRINT_SIGNAL(SIGTSTP)
-        PRINT_SIGNAL(SIGTTIN)
-        PRINT_SIGNAL(SIGTTOU)
-        PRINT_SIGNAL(SIGWINCH)
-
-#  undef PRINT_SIGNAL
-
-        PRINT("\n");
-#endif
-
-#ifdef STATION_IS_SDL_SUPPORTED
-        if (!application.args.no_sdl_given)
+        if (application.signal.set_ptr != NULL)
         {
-            PRINT_("Texture : " COLOR_NUMBER "%u" COLOR_RESET "x" COLOR_NUMBER "%u" COLOR_RESET "\n",
+            PRINT("Signals :");
+
+#define PRINT_SIGNAL(signame)                               \
+            if (application.signal.set.signal_##signame)    \
+                PRINT(" " COLOR_SIGNAL #signame COLOR_RESET);
+
+            PRINT_SIGNAL(SIGHUP)
+            PRINT_SIGNAL(SIGINT)
+            PRINT_SIGNAL(SIGQUIT)
+            PRINT_SIGNAL(SIGUSR1)
+            PRINT_SIGNAL(SIGUSR2)
+            PRINT_SIGNAL(SIGALRM)
+            PRINT_SIGNAL(SIGTERM)
+            PRINT_SIGNAL(SIGTSTP)
+            PRINT_SIGNAL(SIGTTIN)
+            PRINT_SIGNAL(SIGTTOU)
+            PRINT_SIGNAL(SIGWINCH)
+
+#undef PRINT_SIGNAL
+
+            PRINT("\n");
+        }
+
+        if (application.sdl.properties_ptr != NULL)
+        {
+            PRINT_("[SDL] Texture : " COLOR_NUMBER "%u" COLOR_RESET "x" COLOR_NUMBER "%u" COLOR_RESET "\n",
                     application.sdl.properties.texture_width,
                     application.sdl.properties.texture_height);
 
-            PRINT("Window  : " COLOR_NUMBER);
+            PRINT("[SDL] Window  : " COLOR_NUMBER);
 
             if (application.sdl.properties.window_width > 0)
                 PRINT_("%u", application.sdl.properties.window_width);
@@ -893,6 +900,36 @@ static int with_plugin(void)
 
             PRINT_(COLOR_RESET ", %s" COLOR_RESET "\n", application.sdl.properties.window_resizable ?
                     COLOR_FLAG_ON "resizable" : COLOR_FLAG_OFF "not resizable");
+        }
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+        if (!application.opencl.not_needed)
+        {
+            PRINT_("[OpenCL] Contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
+                    application.args.cl_context_given);
+
+            if (application.args.cl_context_given)
+            {
+                for (unsigned i = 0; i < application.args.cl_context_given; i++)
+                {
+                    cl_uint platform_idx = strtoul(
+                            application.args.cl_context_arg[i], (char**)NULL, 16);
+
+                    PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
+                            "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", i, platform_idx);
+
+                    const char *device_mask = strchr(application.args.cl_context_arg[i], ':');
+                    if (device_mask != NULL)
+                        device_mask++;
+
+                    if (device_mask == NULL)
+                        PRINT("all devices");
+                    else
+                        PRINT_("device mask " COLOR_NUMBER "%s" COLOR_RESET, device_mask);
+
+                    PRINT("\n");
+                }
+            }
         }
 #endif
 
@@ -941,8 +978,7 @@ static int with_plugin_resources(void)
     // Start signal management thread //
     ////////////////////////////////////
 
-#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-    if (!application.args.help_given)
+    if (application.signal.set_ptr != NULL)
     {
         bool thread_needed = false;
 
@@ -966,17 +1002,16 @@ static int with_plugin_resources(void)
 
         if (thread_needed)
         {
-            application.signal.context = station_signal_management_thread_start(
+            application.signal.management_context = station_signal_management_thread_start(
                     &application.signal.set);
 
-            if (application.signal.context == NULL)
+            if (application.signal.management_context == NULL)
             {
                 ERROR("couldn't configure signal management");
                 return CODE_ERROR_SIGNAL;
             }
         }
     }
-#endif
 
     ///////////////////////////////////
     // Continue with watched signals //
@@ -989,9 +1024,10 @@ static int with_plugin_resources(void)
     ///////////////////////////////////
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-    if (application.signal.context != NULL)
-        station_signal_management_thread_stop(application.signal.context);
+    if (application.signal.management_context != NULL)
+        station_signal_management_thread_stop(application.signal.management_context);
 #endif
+
     return code;
 }
 
@@ -1003,7 +1039,7 @@ static int with_signals(void)
     ////////////////////////////
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-    if (application.args.cl_context_given)
+    if (!application.opencl.not_needed)
     {
         int code = CODE_OK;
 
@@ -1163,7 +1199,7 @@ static int with_opencl_contexts(void)
 
         uint8_t fsm_code;
 
-        if (application.args.no_sdl_given)
+        if (application.sdl.properties_ptr == NULL)
             fsm_code = station_finite_state_machine(
                     application.fsm.initial_state, application.fsm.data, application.fsm.num_threads);
         else
@@ -1204,7 +1240,8 @@ static int create_opencl_contexts(
     application.opencl.context.num_platforms = application.args.cl_context_given;
 
     // Allocate array of contexts
-    application.opencl.context.contexts = malloc(sizeof(cl_context) * application.args.cl_context_given);
+    application.opencl.context.contexts = malloc(sizeof(cl_context) *
+            application.opencl.context.num_platforms);
     if (application.opencl.context.contexts == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platform contexts");
@@ -1216,7 +1253,7 @@ static int create_opencl_contexts(
 
     // Allocate array of platforms
     application.opencl.context.platforms = malloc(sizeof(*application.opencl.context.platforms) *
-            application.args.cl_context_given);
+            application.opencl.context.num_platforms);
     if (application.opencl.context.platforms == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platforms");

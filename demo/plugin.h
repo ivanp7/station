@@ -27,7 +27,6 @@ struct plugin_resources {
     SDL_Event event;
 #endif
     station_sdl_context_t *sdl_context;
-    station_opencl_context_t *opencl_context;
 
     int counter;
     mtx_t counter_mutex;

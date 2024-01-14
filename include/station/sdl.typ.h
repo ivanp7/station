@@ -45,8 +45,8 @@ typedef struct station_sdl_properties {
     uint16_t window_width;  ///< Window width in pixels.
     uint16_t window_height; ///< Window height in pixels.
 
-    uint8_t window_shown;     ///< Window is shown upon creation.
     uint8_t window_resizable; ///< Window is resizable.
+    uint8_t window_shown;     ///< Window is shown upon creation.
 
     const char *window_title; ///< Window title.
 } station_sdl_properties_t;

@@ -64,92 +64,90 @@ static STATION_SFUNC(sfunc_loop)
 
     struct plugin_resources *resources = fsm_data;
 
-#ifdef STATION_IS_SDL_SUPPORTED
-    SDL_PollEvent(&resources->event);
-#endif
+    if (atomic_load_explicit(&resources->signals->signal_SIGINT, memory_order_acquire))
+    {
+        printf("Caught SIGINT, bye!\n");
+        state->sfunc = sfunc_post;
+        return;
+    }
 
-    // Check termination conditions
     if (atomic_load_explicit(&resources->signals->signal_SIGTERM, memory_order_acquire))
     {
-        printf("Caught SIGTERM, quitting...\n");
+        printf("Caught SIGTERM, bye!\n");
         state->sfunc = sfunc_post;
         return;
     }
-    else if (atomic_load_explicit(&resources->signals->signal_SIGINT, memory_order_acquire))
-    {
-        printf("Caught SIGINT, quitting...\n");
-        state->sfunc = sfunc_post;
-        return;
-    }
-#ifdef STATION_IS_SDL_SUPPORTED
-    else if (resources->event.type == SDL_QUIT)
-    {
-        printf("Window is closed, quitting...\n");
-        state->sfunc = sfunc_post;
-        return;
-    }
-    else if ((resources->event.type == SDL_KEYDOWN) &&
-            (resources->event.key.keysym.sym == SDLK_ESCAPE))
-    {
-        printf("Escape is pressed, quitting...\n");
-        state->sfunc = sfunc_post;
-        return;
-    }
-#endif
 
-    // Process alarm
-    if (atomic_load_explicit(&resources->signals->signal_SIGALRM, memory_order_acquire))
-    {
-        atomic_store_explicit(&resources->signals->signal_SIGALRM, false, memory_order_release);
-        printf("ALARM!!!\n");
-
-        if (resources->alarm_set)
-            printf("fps = %.1f\n", 1.0f * (resources->frame - resources->prev_frame) / ALARM_DELAY);
-
-        resources->alarm_set = false;
-    }
-
-#ifdef STATION_IS_SDL_SUPPORTED
-    if ((resources->event.type == SDL_KEYDOWN) &&
-            (resources->event.key.keysym.sym == SDLK_SPACE) && !resources->alarm_set)
-    {
-        printf("Setting an alarm in %d seconds.\n", ALARM_DELAY);
-        alarm(ALARM_DELAY);
-
-        resources->alarm_set = true;
-        resources->prev_frame = resources->frame;
-    }
-
-    // Process freeze
     if (atomic_load_explicit(&resources->signals->signal_SIGTSTP, memory_order_acquire))
     {
+        printf("Caught SIGTSTP.\n");
         atomic_store_explicit(&resources->signals->signal_SIGTSTP, false, memory_order_release);
-        resources->frozen = !resources->frozen;
+
+        if (!resources->alarm_set)
+        {
+            printf("Setting an alarm in %d seconds.\n", ALARM_DELAY);
+            alarm(ALARM_DELAY);
+
+            resources->alarm_set = true;
+            resources->prev_frame = resources->frame;
+        }
     }
 
-    // Draw into the window
-    if (!resources->frozen)
+    if (atomic_load_explicit(&resources->signals->signal_SIGALRM, memory_order_acquire))
     {
-        if (station_sdl_lock_texture(resources->sdl_context, (const struct SDL_Rect*)NULL) != 0)
+        printf("Caught SIGALRM.\n");
+        atomic_store_explicit(&resources->signals->signal_SIGALRM, false, memory_order_release);
+
+        if (resources->alarm_set)
         {
-            printf("station_sdl_lock_texture() failure\n");
+            printf("fps = %.1f\n", 1.0f * (resources->frame - resources->prev_frame) / ALARM_DELAY);
+            resources->alarm_set = false;
+        }
+    }
+
+#ifdef STATION_IS_SDL_SUPPORTED
+    if (resources->sdl_context != NULL)
+    {
+        SDL_PollEvent(&resources->event);
+
+        if (resources->event.type == SDL_QUIT)
+        {
+            printf("Window is closed, bye!\n");
             state->sfunc = sfunc_post;
             return;
         }
-
-        station_execute_pfunc(pfunc_draw, resources,
-                TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, fsm_context);
-
-        if (station_sdl_unlock_texture_and_render(resources->sdl_context) != 0)
+        else if ((resources->event.type == SDL_KEYDOWN) && (resources->event.key.keysym.sym == SDLK_ESCAPE))
         {
-            printf("station_sdl_unlock_texture_and_render() failure\n");
+            printf("Escape is pressed, bye!\n");
             state->sfunc = sfunc_post;
             return;
         }
+        else if ((resources->event.type == SDL_KEYDOWN) && (resources->event.key.keysym.sym == SDLK_SPACE))
+            resources->frozen = !resources->frozen;
 
-        resources->frame++;
+        if (!resources->frozen)
+        {
+            if (station_sdl_lock_texture(resources->sdl_context, (const struct SDL_Rect*)NULL) != 0)
+            {
+                printf("station_sdl_lock_texture() failure\n");
+                state->sfunc = sfunc_post;
+                return;
+            }
+
+            station_execute_pfunc(pfunc_draw, resources,
+                    TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, fsm_context);
+
+            if (station_sdl_unlock_texture_and_render(resources->sdl_context) != 0)
+            {
+                printf("station_sdl_unlock_texture_and_render() failure\n");
+                state->sfunc = sfunc_post;
+                return;
+            }
+        }
     }
 #endif
+
+    resources->frame++;
 
     /* thrd_yield(); */
 }
@@ -179,14 +177,12 @@ STATION_PLUGIN_HELP(argc, argv)
     return 0;
 }
 
-STATION_PLUGIN_INIT(plugin_resources, initial_state, fsm_data, num_threads, signals, sdl_properties,
-        future_sdl_context, future_opencl_context, argc, argv)
+STATION_PLUGIN_INIT(args, argc, argv)
 {
-    (void) num_threads;
-    (void) argc;
-    (void) argv;
-
-    printf("plugin_init()\n");
+    printf("plugin_init(%i,\n", argc);
+    for (int i = 0; i < argc; i++)
+        printf("  \"%s\",\n", argv[i]);
+    printf(")\n");
 
     struct plugin_resources *resources = malloc(sizeof(*resources));
     if (resources == NULL)
@@ -195,29 +191,37 @@ STATION_PLUGIN_INIT(plugin_resources, initial_state, fsm_data, num_threads, sign
         return 1;
     }
 
-    resources->signals = signals;
-    signals->signal_SIGINT = true;
-    signals->signal_SIGTERM = true;
+    args->plugin_resources = resources;
 
-    if (sdl_properties != NULL)
+    args->fsm_initial_state.sfunc = sfunc_pre;
+    args->fsm_data = resources;
+
+    resources->signals = args->signals;
+    resources->signals->signal_SIGINT = true;
+    resources->signals->signal_SIGTERM = true;
+
+    if (args->sdl_properties != NULL)
     {
-        sdl_properties->texture_width = TEXTURE_WIDTH;
-        sdl_properties->texture_height = TEXTURE_HEIGHT;
+        args->sdl_properties->texture_width = TEXTURE_WIDTH;
+        args->sdl_properties->texture_height = TEXTURE_HEIGHT;
 
-        if (sdl_properties->window_width == 0)
-            sdl_properties->window_width = TEXTURE_WIDTH * WINDOW_SCALE;
+        if (args->sdl_properties->window_width == 0)
+            args->sdl_properties->window_width = TEXTURE_WIDTH * WINDOW_SCALE;
 
-        if (sdl_properties->window_height == 0)
-            sdl_properties->window_height = TEXTURE_HEIGHT * WINDOW_SCALE;
+        if (args->sdl_properties->window_height == 0)
+            args->sdl_properties->window_height = TEXTURE_HEIGHT * WINDOW_SCALE;
 
-        sdl_properties->window_shown = true;
+        args->sdl_properties->window_shown = true;
 
-        if (sdl_properties->window_title == NULL)
-            sdl_properties->window_title = "DEMO";
+        if (args->sdl_properties->window_title == NULL)
+            args->sdl_properties->window_title = "DEMO";
+
+        resources->sdl_context = args->future_sdl_context;
     }
+    else
+        resources->sdl_context = NULL;
 
-    resources->sdl_context = future_sdl_context;
-    resources->opencl_context = future_opencl_context;
+    args->opencl_not_needed = true;
 
     resources->counter = 0;
     mtx_init(&resources->counter_mutex, mtx_plain);
@@ -226,10 +230,6 @@ STATION_PLUGIN_INIT(plugin_resources, initial_state, fsm_data, num_threads, sign
     resources->alarm_set = false;
     resources->prev_frame = 0;
     resources->frame = 0;
-
-    *plugin_resources = resources;
-    initial_state->sfunc = sfunc_pre;
-    *fsm_data = resources;
 
     return 0;
 }

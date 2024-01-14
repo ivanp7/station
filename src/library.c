@@ -269,7 +269,7 @@ station_sdl_lock_texture(
     return -1;
 #else
     if ((sdl_context == NULL) || (sdl_context->texture == NULL) ||
-            (sdl_context->texture_lock_pixels == NULL))
+            (sdl_context->texture_lock_pixels != NULL))
         return 1;
 
     void *pixels;
@@ -292,10 +292,11 @@ station_sdl_unlock_texture_and_render(
 {
 #ifndef STATION_IS_SDL_SUPPORTED
     (void) sdl_context;
+
     return -1;
 #else
     if ((sdl_context == NULL) || (sdl_context->renderer == NULL) ||
-            (sdl_context->texture == NULL))
+            (sdl_context->texture == NULL) || (sdl_context->texture_lock_pixels == NULL))
         return 1;
 
     SDL_UnlockTexture(sdl_context->texture);

@@ -52,14 +52,7 @@
 #define STATION_PLUGIN_PREAMBLE()                                   \
     static int station_plugin_help(int argc, char *argv[]);         \
     static int station_plugin_init(                                 \
-            void **plugin_resources,                                \
-            struct station_state *initial_state,                    \
-            void **fsm_data,                                        \
-            station_threads_number_t *num_threads,                  \
-            struct station_signal_set *signals,                     \
-            struct station_sdl_properties *sdl_properties,          \
-            struct station_sdl_context *future_sdl_context,         \
-            struct station_opencl_context *future_opencl_context,   \
+            struct station_plugin_init_func_args *args,             \
             int argc, char *argv[]);                                \
     static int station_plugin_final(void *plugin_resources);        \
     station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {        \
@@ -79,17 +72,9 @@
 /**
  * @brief Implement plugin initialization function.
  */
-#define STATION_PLUGIN_INIT(plugin_resources, initial_state, fsm_data, num_threads, \
-        signals, sdl_properties, sdl_context, opencl_context, argc, argv)           \
-    static int station_plugin_init(                                 \
-            void **plugin_resources,                                \
-            station_state_t *initial_state,                         \
-            void **fsm_data,                                        \
-            station_threads_number_t *num_threads,                  \
-            struct station_signal_set *signals,                     \
-            station_sdl_properties_t *sdl_properties,               \
-            struct station_sdl_context *future_sdl_context,         \
-            struct station_opencl_context *future_opencl_context,   \
+#define STATION_PLUGIN_INIT(args, argc, argv)       \
+    static int station_plugin_init(                 \
+            station_plugin_init_func_args_t *args,  \
             int argc, char *argv[])
 
 /**
