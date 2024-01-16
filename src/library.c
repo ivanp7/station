@@ -22,6 +22,9 @@
  * @brief Library implementation.
  */
 
+#include <station/buffer.fun.h>
+#include <station/buffer.typ.h>
+
 #include <station/parallel.fun.h>
 #include <station/parallel.typ.h>
 
@@ -53,6 +56,63 @@
 #  include <SDL_video.h>
 #  include <SDL_render.h>
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+// buffer.fun.h
+///////////////////////////////////////////////////////////////////////////////
+
+station_buffer_t*
+station_create_buffer_from_file(
+        const char *file)
+{
+    FILE *fp = fopen(file, "rb");
+    if (fp == NULL)
+        return NULL;
+
+    station_buffer_t *buffer = NULL;
+
+    if (fseek(fp, 0, SEEK_END) != 0)
+        goto cleanup;
+
+    buffer = malloc(sizeof(*buffer));
+    if (buffer == NULL)
+        goto cleanup;
+
+    buffer->num_bytes = ftell(fp);
+    rewind(fp);
+
+    buffer->own_memory = true;
+
+    buffer->bytes = malloc(buffer->num_bytes);
+    if (buffer->bytes == NULL)
+        goto cleanup;
+
+    if (fread(buffer->bytes, 1, buffer->num_bytes, fp) != buffer->num_bytes)
+        goto cleanup;
+
+    fclose(fp);
+    return buffer;
+
+cleanup:
+    if (buffer != NULL)
+        free(buffer->bytes);
+    free(buffer);
+    fclose(fp);
+    return NULL;
+}
+
+void
+station_destroy_buffer(
+        station_buffer_t *buffer)
+{
+    if (buffer == NULL)
+        return;
+
+    if (buffer->own_memory)
+        free(buffer->bytes);
+
+    free(buffer);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // parallel.fun.h

@@ -14,20 +14,23 @@ station-app --cl-list[=TYPE]
 args "--conf-parser --default-optional --no-handle-error --no-help --no-version --unnamed-opts=PLUGIN_FILE"
 
 
-option "conf" F "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
+option "conf" C "Parse arguments from file (multiple allowed)" string typestr="FILE" multiple
+
+section "Alternative modes"
+option "help" h "Display usage help for app or plugin"
+option "cl-list" l "Display list of OpenCL-compatible hardware" enum typestr="TYPE" values="platforms","devices" default="devices" argoptional
 
 section "Output options"
 option "no-logo" - "Don't display application logo"
 option "verbose" v "Display more information"
 
-section "Alternative modes"
-option "help" h "Display usage help for app or plugin"
-option "cl-list" l "Display list of OpenCL platforms/devices" enum typestr="TYPE" values="platforms","devices" default="devices" argoptional
-
 section "Execution options"
 option "threads" j "Number of threads" int typestr="THREADS"
 option "cl-context" c "Create OpenCL context (multiple allowed)" string typestr="PLATFORM_IDX[:DEVICE_IDX_MASK]" multiple
 option "no-sdl" n "Don't initialize SDL subsystems"
+
+section "Data options"
+option "file" f "Create data buffer from file (multiple allowed)" string typestr="FILE" multiple
 
 section "Signal management"
 option "SIGHUP" - "Watch signal #1"

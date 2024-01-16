@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct station_buffers_array;
 struct station_signal_set;
 struct station_opencl_context;
 
@@ -57,12 +58,14 @@ typedef struct station_plugin_conf_func_args {
 typedef struct station_plugin_init_func_inputs {
     void *cmdline; ///< Parsed command line arguments.
 
+    struct station_buffers_array *files; ///< File buffers.
+
     struct station_signal_set *signals; ///< States of signals.
 
     station_parallel_processing_context_t *parallel_processing_context; ///< Parallel processing context.
     struct station_opencl_context *opencl_context; ///< OpenCL context.
 
-    bool sdl_is_available; ///< Whether SDL is available and its subsystems was initialized.
+    bool sdl_is_available; ///< Whether SDL is available for use.
 } station_plugin_init_func_inputs_t;
 
 /**

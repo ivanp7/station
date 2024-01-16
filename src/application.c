@@ -14,6 +14,9 @@
 #include <station/plugin.typ.h>
 #include <station/plugin.def.h>
 
+#include <station/buffer.fun.h>
+#include <station/buffer.typ.h>
+
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
 
@@ -166,6 +169,8 @@ static struct {
         void *resources;
     } plugin;
 
+    station_buffers_array_t files;
+
     struct {
         station_signal_set_t set;
         bool management_used;
@@ -205,6 +210,7 @@ static void initialize(int argc, char *argv[]);
 
 static void exit_release_args(void);
 static void exit_unload_plugin(void);
+static void exit_destroy_buffers(void);
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 static void exit_stop_signal_management_thread(void);
@@ -754,32 +760,30 @@ static void initialize(int argc, char *argv[])
                     application.parallel_processing.num_threads);
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-        if (application.plugin.configuration.opencl_is_used)
+        if (application.plugin.configuration.opencl_is_used &&
+                (application.args.cl_context_given > 0))
         {
             PRINT_("OpenCL contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
                     application.args.cl_context_given);
 
-            if (application.args.cl_context_given)
+            for (unsigned i = 0; i < application.args.cl_context_given; i++)
             {
-                for (unsigned i = 0; i < application.args.cl_context_given; i++)
-                {
-                    cl_uint platform_idx = strtoul(
-                            application.args.cl_context_arg[i], (char**)NULL, 16);
+                cl_uint platform_idx = strtoul(
+                        application.args.cl_context_arg[i], (char**)NULL, 16);
 
-                    PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
-                            "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", i, platform_idx);
+                PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
+                        "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", i, platform_idx);
 
-                    const char *device_mask = strchr(application.args.cl_context_arg[i], ':');
-                    if (device_mask != NULL)
-                        device_mask++;
+                const char *device_mask = strchr(application.args.cl_context_arg[i], ':');
+                if (device_mask != NULL)
+                    device_mask++;
 
-                    if (device_mask == NULL)
-                        PRINT("all devices");
-                    else
-                        PRINT_("device mask " COLOR_NUMBER "%s" COLOR_RESET, device_mask);
+                if (device_mask == NULL)
+                    PRINT("all devices");
+                else
+                    PRINT_("device mask " COLOR_NUMBER "%s" COLOR_RESET, device_mask);
 
-                    PRINT("\n");
-                }
+                PRINT("\n");
             }
         }
 #endif
@@ -814,7 +818,50 @@ static void initialize(int argc, char *argv[])
         }
 #endif
 
+        if (application.args.file_given > 0)
+        {
+            PRINT_("Files: " COLOR_NUMBER "%u" COLOR_RESET "\n", application.args.file_given);
+
+            for (unsigned i = 0; i < application.args.file_given; i++)
+                PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n", i, application.args.file_arg[i]);
+        }
+
         PRINT("\n");
+    }
+
+    ///////////////////////////////
+    // Create buffers from files //
+    ///////////////////////////////
+
+    application.files.num_buffers = application.args.file_given;
+
+    application.files.buffers = malloc(
+            sizeof(*application.files.buffers) * application.files.num_buffers);
+    if (application.files.buffers == NULL)
+    {
+        ERROR("couldn't allocate array of file buffers");
+        exit(STATION_APP_ERROR_MALLOC);
+    }
+
+    for (unsigned i = 0; i < application.files.num_buffers; i++)
+        application.files.buffers[i] = NULL;
+
+    AT_EXIT(exit_destroy_buffers);
+
+    for (unsigned i = 0; i < application.files.num_buffers; i++)
+    {
+        application.files.buffers[i] = station_create_buffer_from_file(
+                application.args.file_arg[i]);
+
+        if (application.files.buffers[i] == NULL)
+        {
+            ERROR_("couldn't create buffer from file #"
+                    COLOR_NUMBER "%u" COLOR_RESET " '"
+                    COLOR_STRING "%s" COLOR_RESET "'\n",
+                    i, application.args.file_arg[i]);
+            exit(STATION_APP_ERROR_FILE);
+        }
     }
 
     ////////////////////////////////////
@@ -905,6 +952,15 @@ static void exit_unload_plugin(void)
     dlclose(application.plugin.handle);
 }
 
+static void exit_destroy_buffers(void)
+{
+    if (application.files.buffers != NULL)
+        for (size_t i = 0; i < application.files.num_buffers; i++)
+            station_destroy_buffer(application.files.buffers[i]);
+
+    free(application.files.buffers);
+}
+
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 static void exit_stop_signal_management_thread(void)
 {
@@ -957,6 +1013,7 @@ static int run(void)
     {
         station_plugin_init_func_inputs_t plugin_init_func_inputs = {
             .cmdline = application.plugin.configuration.cmdline,
+            .files = &application.files,
             .signals = &application.signal.set,
             .parallel_processing_context = &application.parallel_processing.context,
             .opencl_context = &application.opencl.context,

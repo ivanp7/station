@@ -19,24 +19,32 @@
 
 /**
  * @file
- * @brief Application error codes.
+ * @brief Types for data buffers.
  */
 
 #pragma once
-#ifndef _STATION_APPLICATION_DEF_H_
-#define _STATION_APPLICATION_DEF_H_
+#ifndef _STATION_BUFFER_TYP_H_
+#define _STATION_BUFFER_TYP_H_
 
-#define STATION_APP_ERROR_BASE 64
+#include <stddef.h>
+#include <stdbool.h>
 
-#define STATION_APP_ERROR_ATEXIT        (STATION_APP_ERROR_BASE + 1)
-#define STATION_APP_ERROR_ARGUMENTS     (STATION_APP_ERROR_BASE + 2)
-#define STATION_APP_ERROR_PLUGIN        (STATION_APP_ERROR_BASE + 3)
-#define STATION_APP_ERROR_MALLOC        (STATION_APP_ERROR_BASE + 4)
-#define STATION_APP_ERROR_FILE          (STATION_APP_ERROR_BASE + 5)
-#define STATION_APP_ERROR_SIGNAL        (STATION_APP_ERROR_BASE + 6)
-#define STATION_APP_ERROR_THREADS       (STATION_APP_ERROR_BASE + 7)
-#define STATION_APP_ERROR_OPENCL        (STATION_APP_ERROR_BASE + 8)
-#define STATION_APP_ERROR_SDL           (STATION_APP_ERROR_BASE + 9)
+/**
+ * @brief Buffer of bytes.
+ */
+typedef struct station_buffer {
+    size_t num_bytes;     ///< Size of data in bytes.
+    bool own_memory;      ///< Whether memory is owned by buffer.
+    unsigned char *bytes; ///< Data (object representation).
+} station_buffer_t;
 
-#endif // _STATION_APPLICATION_DEF_H_
+/**
+ * @brief Array of buffers.
+ */
+typedef struct station_buffers_array {
+    size_t num_buffers;
+    station_buffer_t **buffers;
+} station_buffers_array_t;
+
+#endif // _STATION_BUFFER_TYP_H_
 
