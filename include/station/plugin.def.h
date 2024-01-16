@@ -33,7 +33,7 @@
 /**
  * @brief Plugin version - value determining application-plugin compatibility.
  */
-#define STATION_PLUGIN_VERSION 20240101
+#define STATION_PLUGIN_VERSION 20240115
 
 /**
  * @brief Name of plugin format structure object.
@@ -45,43 +45,49 @@
 #define STATION_PLUGIN_VTABLE_OBJECT station_plugin_vtable_object
 
 /**
- * @brief Plugin preamble.
+ * @brief Plugin help function declarator.
  *
- * Declares functions, defines global objects.
+ * @see station_plugin_help_func_t
  */
-#define STATION_PLUGIN_PREAMBLE()                                   \
-    static int station_plugin_help(int argc, char *argv[]);         \
-    static int station_plugin_init(                                 \
-            struct station_plugin_init_func_args *args,             \
-            int argc, char *argv[]);                                \
-    static int station_plugin_final(void *plugin_resources);        \
-    station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {        \
-        .signature = STATION_PLUGIN_SIGNATURE,                      \
-        .version = STATION_PLUGIN_VERSION};                         \
-    station_plugin_vtable_t STATION_PLUGIN_VTABLE_OBJECT = {        \
-        .help_fn = station_plugin_help,                             \
-        .init_fn = station_plugin_init,                             \
-        .final_fn = station_plugin_final};
+#define STATION_PLUGIN_HELP_FUNC(name) \
+    void name(int argc, char *argv[])
 
 /**
- * @brief Implement plugin help function.
+ * @brief Plugin configuration function declarator.
+ *
+ * @see station_plugin_conf_func_t
  */
-#define STATION_PLUGIN_HELP(argc, argv) \
-    static int station_plugin_help(int argc, char *argv[])
+#define STATION_PLUGIN_CONF_FUNC(name) \
+    void name(station_plugin_conf_func_args_t *args, int argc, char *argv[])
 
 /**
- * @brief Implement plugin initialization function.
+ * @brief Plugin initialization function declarator.
+ *
+ * @see station_plugin_init_func_t
  */
-#define STATION_PLUGIN_INIT(args, argc, argv)       \
-    static int station_plugin_init(                 \
-            station_plugin_init_func_args_t *args,  \
-            int argc, char *argv[])
+#define STATION_PLUGIN_INIT_FUNC(name) \
+    void name(const station_plugin_init_func_inputs_t *inputs, \
+            station_plugin_init_func_outputs_t *outputs)
 
 /**
- * @brief Implement plugin finalization function.
+ * @brief Plugin finalization function declarator.
+ *
+ * @see station_plugin_final_func_t
  */
-#define STATION_PLUGIN_FINAL(plugin_resources) \
-    static int station_plugin_final(void *plugin_resources)
+#define STATION_PLUGIN_FINAL_FUNC(name) \
+    int name(void *plugin_resources, bool quick)
+
+/**
+ * @brief Define plugin objects.
+ */
+#define STATION_PLUGIN(plugin_name, plugin_help, plugin_conf, plugin_init, plugin_final) \
+    station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {    \
+        .signature = STATION_PLUGIN_SIGNATURE,                  \
+        .version = STATION_PLUGIN_VERSION};                     \
+    station_plugin_vtable_t STATION_PLUGIN_VTABLE_OBJECT = {    \
+        .name = plugin_name, .help_fn = plugin_help,            \
+        .conf_fn = plugin_conf, .init_fn = plugin_init,         \
+        .final_fn = plugin_final};
 
 #endif // _STATION_PLUGIN_DEF_H_
 

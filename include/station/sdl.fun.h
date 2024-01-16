@@ -19,60 +19,69 @@
 
 /**
  * @file
- * @brief Operations in state functions.
+ * @brief SDL related functions.
  */
 
 #pragma once
-#ifndef _STATION_OP_FUN_H_
-#define _STATION_OP_FUN_H_
+#ifndef _STATION_SDL_FUN_H_
+#define _STATION_SDL_FUN_H_
 
-#include <station/func.typ.h>
-
-struct station_fsm_context;
-struct station_sdl_context;
+struct station_sdl_window_context;
+struct station_sdl_window_properties;
 struct SDL_Rect;
 
 /**
- * @brief Execute a parallel processing function from inside a state function.
+ * @brief Create SDL window with accompanying resources - renderer and texture.
  *
- * Does not return until all tasks are done.
+ * Steps:
+ * 1. SDL_CreateWindow()
+ * 2. SDL_CreateRenderer()
+ * 3. SDL_CreateTexture()
  *
- * If value of batch_size is zero, it is replaced with ((num_tasks - 1) / num_threads) + 1.
- * This batch size leads to pfunc being called no more than once per thread.
+ * @return 0 if succeed, -1 if arguments are incorrect,
+ * -2 if SDL not supported, otherwise number of the failed step.
  */
-void
-station_execute_pfunc(
-        station_pfunc_t pfunc, ///< [in] Parallel processing function.
-        void *pfunc_data,      ///< [in] Processed data.
-
-        station_tasks_number_t num_tasks,  ///< [in] Number of tasks to be processed.
-        station_tasks_number_t batch_size, ///< [in] Number of tasks done by a thread per once.
-
-        struct station_fsm_context *fsm_context ///< [in] Finite state machine context.
+int
+station_sdl_initialize_window_context(
+        struct station_sdl_window_context *context, ///< [out] Context to initialize.
+        const struct station_sdl_window_properties *properties ///< [in] Window properties.
 );
 
 /**
- * @brief Lock SDL texture for writing.
+ * @brief Destroy SDL window.
  *
- * @return Zero on success, non-zero on failure.
- * In case SDL is not supported, this function returns maximum value of the return type.
+ * Steps:
+ * 1. SDL_DestroyTexture()
+ * 2. SDL_DestroyRenderer()
+ * 3. SDL_DestroyWindow()
  */
-uint8_t
-station_sdl_lock_texture(
-        struct station_sdl_context *sdl_context, ///< [in,out] SDL context.
+void
+station_sdl_destroy_window_context(
+        struct station_sdl_window_context *context ///< [in,out] Context to destroy.
+);
+
+/**
+ * @brief Lock window texture for update.
+ *
+ * @return 0 if succeed, -1 if context is invalid,
+ * -2 if SDL not supported, 2 if texture is locked already, otherwise 1.
+ */
+int
+station_sdl_window_lock_texture(
+        struct station_sdl_window_context *context, ///< [in,out] Context.
         const struct SDL_Rect *rectangle ///< [in] Rectangle to lock, or NULL for full texture.
 );
 
 /**
- * @brief Unlock SDL texture and render updated content to the window.
+ * @brief Unlock window texture and render updated rectangle.
  *
- * @return Zero on success, non-zero on failure.
- * In case SDL is not supported, this function returns maximum value of the return type.
+ * @return 0 if succeed, -1 if context is invalid,
+ * -2 if SDL not supported, 2 if texture is not locked, otherwise 1.
  */
-uint8_t
-station_sdl_unlock_texture_and_render(
-        struct station_sdl_context *sdl_context ///< [in,out] SDL context.
+int
+station_sdl_window_unlock_texture_and_render(
+        struct station_sdl_window_context *context ///< [in,out] Context.
 );
 
-#endif // _STATION_OP_FUN_H_
+#endif // _STATION_SDL_FUN_H_
 

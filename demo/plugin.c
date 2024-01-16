@@ -1,8 +1,12 @@
 #include "plugin.h"
 
-#include <station/op.fun.h>
+#include <station/plugin.typ.h>
+#include <station/signal.typ.h>
+#include <station/parallel.fun.h>
+#include <station/sdl.fun.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 
@@ -28,6 +32,7 @@ static STATION_PFUNC(pfunc_dec)
     mtx_unlock(&resources->counter_mutex);
 }
 
+#ifdef STATION_IS_SDL_SUPPORTED
 static STATION_PFUNC(pfunc_draw)
 {
     (void) thread_idx;
@@ -40,8 +45,9 @@ static STATION_PFUNC(pfunc_draw)
     uint32_t pixel = ((x+y) + resources->frame) & 0xFF;
     pixel = (pixel << 16) | (pixel << 8) | pixel;
 
-    resources->sdl_context->texture_lock_pixels[task_idx] = pixel;
+    resources->sdl_window.texture.lock.pixels[task_idx] = pixel;
 }
+#endif
 
 
 static STATION_SFUNC(sfunc_pre)
@@ -50,38 +56,44 @@ static STATION_SFUNC(sfunc_pre)
 
     struct plugin_resources *resources = fsm_data;
 
-    station_execute_pfunc(pfunc_inc, resources, NUM_TASKS, BATCH_SIZE, fsm_context);
+    station_parallel_processing_execute(resources->parallel_processing_context,
+            pfunc_inc, resources, NUM_TASKS, BATCH_SIZE);
 
     if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+    {
         printf("counter has incorrect value\n");
+        exit(1);
+    }
 
     state->sfunc = sfunc_loop;
 }
 
 static STATION_SFUNC(sfunc_loop)
 {
-    (void) fsm_context;
-
     struct plugin_resources *resources = fsm_data;
+    station_signal_set_t *signals = resources->signals;
 
-    if (atomic_load_explicit(&resources->signals->signal_SIGINT, memory_order_acquire))
+    if (atomic_load_explicit(&signals->signal_SIGINT, memory_order_acquire))
     {
         printf("Caught SIGINT, bye!\n");
         state->sfunc = sfunc_post;
         return;
     }
-
-    if (atomic_load_explicit(&resources->signals->signal_SIGTERM, memory_order_acquire))
+    else if (atomic_load_explicit(&signals->signal_SIGQUIT, memory_order_acquire))
+    {
+        printf("Caught SIGQUIT, bye!\n");
+        quick_exit(EXIT_SUCCESS);
+    }
+    else if (atomic_load_explicit(&signals->signal_SIGTERM, memory_order_acquire))
     {
         printf("Caught SIGTERM, bye!\n");
-        state->sfunc = sfunc_post;
-        return;
+        exit(EXIT_SUCCESS);
     }
 
-    if (atomic_load_explicit(&resources->signals->signal_SIGTSTP, memory_order_acquire))
+    if (atomic_load_explicit(&signals->signal_SIGTSTP, memory_order_acquire))
     {
         printf("Caught SIGTSTP.\n");
-        atomic_store_explicit(&resources->signals->signal_SIGTSTP, false, memory_order_release);
+        atomic_store_explicit(&signals->signal_SIGTSTP, false, memory_order_release);
 
         if (!resources->alarm_set)
         {
@@ -93,20 +105,32 @@ static STATION_SFUNC(sfunc_loop)
         }
     }
 
-    if (atomic_load_explicit(&resources->signals->signal_SIGALRM, memory_order_acquire))
+    if (atomic_load_explicit(&signals->signal_SIGALRM, memory_order_acquire))
     {
         printf("Caught SIGALRM.\n");
-        atomic_store_explicit(&resources->signals->signal_SIGALRM, false, memory_order_release);
+        atomic_store_explicit(&signals->signal_SIGALRM, false, memory_order_release);
 
         if (resources->alarm_set)
         {
-            printf("fps = %.1f\n", 1.0f * (resources->frame - resources->prev_frame) / ALARM_DELAY);
+            printf("fps = %.2g\n", 1.0f * (resources->frame - resources->prev_frame) / ALARM_DELAY);
             resources->alarm_set = false;
         }
     }
 
+    resources->frame++;
+
 #ifdef STATION_IS_SDL_SUPPORTED
-    if (resources->sdl_context != NULL)
+    if (resources->sdl_window_created)
+        state->sfunc = sfunc_loop_sdl;
+#endif
+}
+
+#ifdef STATION_IS_SDL_SUPPORTED
+static STATION_SFUNC(sfunc_loop_sdl)
+{
+    struct plugin_resources *resources = fsm_data;
+
+    if (resources->sdl_window_created)
     {
         SDL_PollEvent(&resources->event);
 
@@ -116,41 +140,42 @@ static STATION_SFUNC(sfunc_loop)
             state->sfunc = sfunc_post;
             return;
         }
-        else if ((resources->event.type == SDL_KEYDOWN) && (resources->event.key.keysym.sym == SDLK_ESCAPE))
+        else if ((resources->event.type == SDL_KEYDOWN) &&
+                (resources->event.key.keysym.sym == SDLK_ESCAPE))
         {
             printf("Escape is pressed, bye!\n");
             state->sfunc = sfunc_post;
             return;
         }
-        else if ((resources->event.type == SDL_KEYDOWN) && (resources->event.key.keysym.sym == SDLK_SPACE))
+        else if ((resources->event.type == SDL_KEYDOWN) &&
+                (resources->event.key.keysym.sym == SDLK_SPACE))
             resources->frozen = !resources->frozen;
 
         if (!resources->frozen)
         {
-            if (station_sdl_lock_texture(resources->sdl_context, (const struct SDL_Rect*)NULL) != 0)
+            if (station_sdl_window_lock_texture(&resources->sdl_window,
+                        (const struct SDL_Rect*)NULL) != 0)
             {
-                printf("station_sdl_lock_texture() failure\n");
+                printf("station_sdl_window_lock_texture() failure\n");
                 state->sfunc = sfunc_post;
                 return;
             }
 
-            station_execute_pfunc(pfunc_draw, resources,
-                    TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, fsm_context);
+            station_parallel_processing_execute(resources->parallel_processing_context,
+                    pfunc_draw, resources, TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE);
 
-            if (station_sdl_unlock_texture_and_render(resources->sdl_context) != 0)
+            if (station_sdl_window_unlock_texture_and_render(&resources->sdl_window) != 0)
             {
-                printf("station_sdl_unlock_texture_and_render() failure\n");
+                printf("station_sdl_window_unlock_texture_and_render() failure\n");
                 state->sfunc = sfunc_post;
                 return;
             }
         }
     }
-#endif
 
-    resources->frame++;
-
-    /* thrd_yield(); */
+    state->sfunc = sfunc_loop;
 }
+#endif
 
 static STATION_SFUNC(sfunc_post)
 {
@@ -158,70 +183,87 @@ static STATION_SFUNC(sfunc_post)
 
     struct plugin_resources *resources = fsm_data;
 
-    station_execute_pfunc(pfunc_dec, resources, NUM_TASKS, BATCH_SIZE, fsm_context);
+    station_parallel_processing_execute(resources->parallel_processing_context,
+            pfunc_dec, resources, NUM_TASKS, BATCH_SIZE);
 
     if (resources->counter != 0)
+    {
         printf("counter has incorrect value\n");
+        exit(1);
+    }
 
     state->sfunc = NULL;
 }
 
 
-STATION_PLUGIN_HELP(argc, argv)
+static STATION_PLUGIN_HELP_FUNC(plugin_help)
 {
     printf("plugin_help(%i,\n", argc);
     for (int i = 0; i < argc; i++)
         printf("  \"%s\",\n", argv[i]);
     printf(")\n");
-
-    return 0;
 }
 
-STATION_PLUGIN_INIT(args, argc, argv)
+static STATION_PLUGIN_CONF_FUNC(plugin_conf)
 {
-    printf("plugin_init(%i,\n", argc);
+    printf("plugin_conf(%i,\n", argc);
     for (int i = 0; i < argc; i++)
         printf("  \"%s\",\n", argv[i]);
     printf(")\n");
+
+    args->signals->signal_SIGINT = true;
+    args->signals->signal_SIGQUIT = true;
+    args->signals->signal_SIGTERM = true;
+
+    args->opencl_is_used = true; // allow contexts to be created
+
+    args->sdl_is_used = true;
+#ifdef STATION_IS_SDL_SUPPORTED
+    args->sdl_init_flags = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
+#endif
+}
+
+static STATION_PLUGIN_INIT_FUNC(plugin_init)
+{
+    printf("plugin_init()\n");
 
     struct plugin_resources *resources = malloc(sizeof(*resources));
     if (resources == NULL)
     {
         printf("malloc() failed\n");
-        return 1;
+        exit(1);
     }
 
-    args->plugin_resources = resources;
+    outputs->plugin_resources = resources;
 
-    args->fsm_initial_state.sfunc = sfunc_pre;
-    args->fsm_data = resources;
+    outputs->fsm_initial_state.sfunc = sfunc_pre;
+    outputs->fsm_data = resources;
 
-    resources->signals = args->signals;
-    resources->signals->signal_SIGINT = true;
-    resources->signals->signal_SIGTERM = true;
+    resources->signals = inputs->signals;
 
-    if (args->sdl_properties != NULL)
+    resources->parallel_processing_context = inputs->parallel_processing_context;
+
+    if (inputs->sdl_is_available)
     {
-        args->sdl_properties->texture_width = TEXTURE_WIDTH;
-        args->sdl_properties->texture_height = TEXTURE_HEIGHT;
+        station_sdl_window_properties_t properties = {
+            .texture = {.width = TEXTURE_WIDTH, .height = TEXTURE_HEIGHT},
+            .window = {.width = TEXTURE_WIDTH * WINDOW_SCALE,
+                .height = TEXTURE_HEIGHT * WINDOW_SCALE,
+                .title = "Demo window"},
+        };
 
-        if (args->sdl_properties->window_width == 0)
-            args->sdl_properties->window_width = TEXTURE_WIDTH * WINDOW_SCALE;
+        int code = station_sdl_initialize_window_context(&resources->sdl_window, &properties);
+        if (code != 0)
+        {
+            printf("station_sdl_initialize_window_context() returned %i\n", code);
+            free(resources);
+            exit(1);
+        }
 
-        if (args->sdl_properties->window_height == 0)
-            args->sdl_properties->window_height = TEXTURE_HEIGHT * WINDOW_SCALE;
-
-        args->sdl_properties->window_shown = true;
-
-        if (args->sdl_properties->window_title == NULL)
-            args->sdl_properties->window_title = "DEMO";
-
-        resources->sdl_context = args->future_sdl_context;
+        resources->sdl_window_created = true;
     }
     else
-        resources->sdl_context = NULL;
-
-    args->opencl_not_needed = true;
+        resources->sdl_window_created = false;
 
     resources->counter = 0;
     mtx_init(&resources->counter_mutex, mtx_plain);
@@ -230,12 +272,12 @@ STATION_PLUGIN_INIT(args, argc, argv)
     resources->alarm_set = false;
     resources->prev_frame = 0;
     resources->frame = 0;
-
-    return 0;
 }
 
-STATION_PLUGIN_FINAL(plugin_resources)
+static STATION_PLUGIN_FINAL_FUNC(plugin_final)
 {
+    (void) quick;
+
     printf("plugin_final()\n");
 
     struct plugin_resources *resources = plugin_resources;
@@ -243,6 +285,10 @@ STATION_PLUGIN_FINAL(plugin_resources)
     if (resources != NULL)
     {
         mtx_destroy(&resources->counter_mutex);
+
+        if (resources->sdl_window_created)
+            station_sdl_destroy_window_context(&resources->sdl_window);
+
         free(resources);
 
         return 0;
@@ -250,4 +296,6 @@ STATION_PLUGIN_FINAL(plugin_resources)
     else
         return 1;
 }
+
+STATION_PLUGIN("Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final)
 

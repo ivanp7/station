@@ -25,16 +25,9 @@ option "help" h "Display usage help for app or plugin"
 option "cl-list" l "Display list of OpenCL platforms/devices" enum typestr="TYPE" values="platforms","devices" default="devices" argoptional
 
 section "Execution options"
-option "threads" j "Number of parallel processing threads" int typestr="THREADS"
+option "threads" j "Number of threads" int typestr="THREADS"
 option "cl-context" c "Create OpenCL context (multiple allowed)" string typestr="PLATFORM_IDX[:DEVICE_IDX_MASK]" multiple
-option "no-sdl" n "Don't provide SDL context"
-
-section "SDL options"
-option "window-width"  x "Window width"  int typestr="SIZE"
-option "window-height" y "Window height" int typestr="SIZE"
-option "window-resizable" r "Make window resizable"
-option "window-shown" w "Show window after creation"
-option "window-title" t "Window title" string
+option "no-sdl" n "Don't initialize SDL subsystems"
 
 section "Signal management"
 option "SIGHUP" - "Watch signal #1"

@@ -19,19 +19,51 @@
 
 /**
  * @file
- * @brief Minimum set of headers required for a user plugin.
+ * @brief Types for parallel processing.
  */
 
 #pragma once
-#ifndef _STATION_PLUGIN_H_
-#define _STATION_PLUGIN_H_
+#ifndef _STATION_PARALLEL_TYP_H_
+#define _STATION_PARALLEL_TYP_H_
 
-#include <station/plugin.def.h> // for plugin implementation macros
-#include <station/plugin.typ.h> // for plugin binary compatibility types
-#include <station/index.typ.h>  // for index types
-#include <station/state.typ.h>  // for finite state machine state type
-#include <station/sdl.typ.h>    // for SDL context
-#include <station/opencl.typ.h> // for OpenCL context
+#include <stdint.h>
 
-#endif // _STATION_PLUGIN_H_
+struct station_parallel_processing_threads_state;
+
+/**
+ * @brief Index of a parallel task.
+ */
+typedef uint32_t station_task_idx_t;
+/**
+ * @brief Number of parallel tasks.
+ */
+typedef station_task_idx_t station_tasks_number_t;
+
+/**
+ * @brief Index of a thread.
+ */
+typedef uint16_t station_thread_idx_t;
+/**
+ * @brief Number of threads.
+ */
+typedef station_thread_idx_t station_threads_number_t;
+
+/**
+ * @brief Parallel processing function.
+ */
+typedef void (*station_pfunc_t)(
+        void *data, ///< [in,out] Processed data.
+        station_task_idx_t task_idx,    ///< [in] Index of the current task.
+        station_thread_idx_t thread_idx ///< [in] Index of the current thread.
+);
+
+/**
+ * @brief Parallel processing context.
+ */
+typedef struct station_parallel_processing_context {
+    struct station_parallel_processing_threads_state *state; ///< State of parallel processing threads.
+    station_threads_number_t num_threads; ///< Number of parallel processing threads.
+} station_parallel_processing_context_t;
+
+#endif // _STATION_PARALLEL_TYP_H_
 

@@ -1,35 +1,32 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <dlfcn.h>
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
 #  include <CL/cl.h>
 #endif
 
+#ifdef STATION_IS_SDL_SUPPORTED
+#  include <SDL.h>
+#endif
+
 #include <station/plugin.typ.h>
 #include <station/plugin.def.h>
+
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
+
+#include <station/parallel.fun.h>
+
 #include <station/sdl.typ.h>
 #include <station/opencl.typ.h>
-#include <station/fsm.fun.h>
-#include <station/fsm.def.h>
+
+#include <station/application.def.h>
 
 #include "application_args.h"
 
-
-#define CODE_OK 0
-#define CODE_ERROR_GENERAL 1
-#define CODE_ERROR_ARGUMENTS 2
-#define CODE_ERROR_SIGNAL 3
-#define CODE_ERROR_PLUGIN 4
-#define CODE_ERROR_OPENCL 5
-#define CODE_ERROR_FSM 6
-#define CODE_ERROR_FSM_SDL 7
-#define CODE_ERROR_MALLOC 8
-#define CODE_ERROR_USER 16
-
+/*****************************************************************************/
 
 #ifdef STATION_IS_ANSI_ESCAPE_CODES_ENABLED
 
@@ -118,6 +115,7 @@
 #define COLOR_FLAG_ON COLOR_FG_GREEN
 #define COLOR_FLAG_OFF COLOR_FG_RED
 #define COLOR_SIGNAL COLOR_FG_BRI_MAGENTA
+#define COLOR_SDL_SUBSYSTEM COLOR_FG_BRI_CYAN
 #define COLOR_VERSION COLOR_FG_BRI_BLUE
 #define COLOR_OUTPUT_SEGMENT COLOR_FG_BRI_BLACK
 #define COLOR_ERROR COLOR_FG_BRI_RED
@@ -133,13 +131,26 @@
 #define ERROR_(msg, ...) fprintf(stderr, "\n" COLOR_ERROR "Error" COLOR_RESET \
         ": " msg ".\n", __VA_ARGS__)
 
+#define AT_EXIT(func) do {                      \
+    if (atexit(func) != 0) {                    \
+        ERROR("atexit(" #func ") has failed");  \
+        func();                                 \
+        exit(STATION_APP_ERROR_ATEXIT); } } while (0)
+
+#define AT_QUICK_EXIT(func) do {                        \
+    if (at_quick_exit(func) != 0) {                     \
+        ERROR("at_quick_exit(" #func ") has failed");   \
+        func();                                         \
+        exit(STATION_APP_ERROR_ATEXIT); } } while (0)
 
 #define STRINGIFY(obj) STRING_OF(obj)
 #define STRING_OF(obj) #obj
 
+/*****************************************************************************/
 
 static struct {
     struct gengetopt_args_info args;
+    bool verbose;
 
     struct {
         int argc;
@@ -150,96 +161,166 @@ static struct {
         station_plugin_format_t *format;
         station_plugin_vtable_t *vtable;
 
+        station_plugin_conf_func_args_t configuration;
+
         void *resources;
     } plugin;
 
     struct {
-        station_signal_set_t set, *set_ptr;
+        station_signal_set_t set;
+        bool management_used;
         struct station_signal_management_context *management_context;
     } signal;
 
     struct {
-        station_sdl_properties_t properties, *properties_ptr;
-        station_sdl_context_t context, *context_ptr;
-    } sdl;
+        station_threads_number_t num_threads;
+        station_parallel_processing_context_t context;
+    } parallel_processing;
 
     struct {
-        bool not_needed;
-        station_opencl_context_t context, *context_ptr;
+        station_opencl_context_t context;
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+        struct {
+            cl_uint num_platforms;
+            cl_platform_id *platform_list;
+            cl_uint *num_devices;
+            cl_device_id **device_list;
+        } tmp;
+#endif
     } opencl;
 
     struct {
-        station_state_t initial_state;
+        station_state_t state;
         void *data;
-        station_threads_number_t num_threads;
     } fsm;
+
+    bool print_final_message;
+    bool end_of_main_reached;
 } application;
 
+/*****************************************************************************/
 
-static int with_args(void);
-static int with_plugin(void);
-static int with_plugin_resources(void);
-static int with_signals(void);
-static int with_opencl_contexts(void);
+static void initialize(int argc, char *argv[]);
 
-#ifdef STATION_IS_OPENCL_SUPPORTED
-static int create_opencl_contexts(
-        cl_uint num_platforms, cl_platform_id *platform_list,
-        cl_uint *num_devices, cl_device_id **device_list);
+static void exit_release_args(void);
+static void exit_unload_plugin(void);
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+static void exit_stop_signal_management_thread(void);
 #endif
 
+static void exit_stop_threads(void);
+
+#ifdef STATION_IS_SDL_SUPPORTED
+static void exit_quit_sdl(void);
+#endif
+
+static void exit_end_plugin_help_fn_output(void);
+static void exit_end_plugin_conf_fn_output(void);
+
+/*****************************************************************************/
+
+static int run(void);
+static int finalize(bool quick);
+
+static void exit_finalize_plugin(void);
+static void exit_finalize_plugin_quick(void);
+
+static void exit_end_plugin_init_fn_output(void);
+static void exit_end_plugin_exec_fn_output(void);
+
+/*****************************************************************************/
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+
+static void display_opencl_listing(void);
+
+static void prepare_opencl_tmp_arrays(void);
+static void create_opencl_contexts(void);
+static void release_opencl_tmp_arrays(void);
+
+static void exit_release_opencl(void);
+static void exit_release_opencl_quick(void);
+
+#endif
+
+/*****************************************************************************/
+
+static void exit_print_final_message(void);
+static void exit_print_final_message_quick(void);
 
 int main(int argc, char *argv[])
 {
-    ///////////////////////////////////
-    // Initialize supported features //
-    ///////////////////////////////////
+    AT_EXIT(exit_print_final_message);
+    AT_QUICK_EXIT(exit_print_final_message_quick);
 
-#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-    application.signal.set_ptr = &application.signal.set;
-#endif
+    initialize(argc, argv);
 
-#ifdef STATION_IS_SDL_SUPPORTED
-    application.sdl.properties_ptr = &application.sdl.properties;
-    application.sdl.context_ptr = &application.sdl.context;
-#endif
+    if (application.verbose)
+        application.print_final_message = true;
 
-#ifdef STATION_IS_OPENCL_SUPPORTED
-    application.opencl.context_ptr = &application.opencl.context;
-#endif
+    int exit_code = run();
 
+    application.end_of_main_reached = true;
+    return exit_code;
+}
+
+static void exit_print_final_message(void)
+{
+    if (application.print_final_message)
+    {
+        if (application.end_of_main_reached)
+            PRINT("\nApplication is terminated by reaching end of main().\n");
+        else
+            PRINT("\nApplication is terminated by exit() call.\n");
+    }
+}
+
+static void exit_print_final_message_quick(void)
+{
+    if (application.print_final_message)
+        PRINT("\nApplication is terminated by quick_exit() call.\n");
+}
+
+/*****************************************************************************/
+
+static void initialize(int argc, char *argv[])
+{
     //////////////////////////////////////////////////
     // Split application and plugin arguments apart //
     //////////////////////////////////////////////////
 
-    int app_argc = argc;
-    application.plugin.argv = argv + argc;
-
-    for (int i = 1; i < argc; i++)
-        if (strcmp(argv[i], "--") == 0)
-        {
-            app_argc = i;
-            application.plugin.argc = argc - app_argc;
-            application.plugin.argv = argv + app_argc;
-            break;
-        }
-
-    /////////////////////////////////
-    // Parse application arguments //
-    /////////////////////////////////
-
-    args_parser_init(&application.args);
-
-    if (args_parser(app_argc, argv, &application.args) != 0)
     {
-        ERROR("couldn't parse application arguments");
-        args_parser_free(&application.args);
-        return CODE_ERROR_ARGUMENTS;
+        int app_argc = argc;
+        application.plugin.argv = argv + argc;
+
+        for (int i = 1; i < argc; i++)
+            if (strcmp(argv[i], "--") == 0)
+            {
+                app_argc = i;
+                application.plugin.argc = argc - app_argc;
+                application.plugin.argv = argv + app_argc;
+                break;
+            }
+
+        /////////////////////////////////
+        // Parse application arguments //
+        /////////////////////////////////
+
+        args_parser_init(&application.args);
+        AT_EXIT(exit_release_args);
+
+        if (args_parser(app_argc, argv, &application.args) != 0)
+        {
+            ERROR("couldn't parse application arguments");
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
     }
 
-    ///////////////////////////////
-    // Parse configuration files //
-    ///////////////////////////////
+    ////////////////////////////////////////////
+    // Parse application arguments from files //
+    ////////////////////////////////////////////
 
     {
         struct args_parser_params params;
@@ -258,38 +339,20 @@ int main(int argc, char *argv[])
             {
                 ERROR_("couldn't parse arguments from file "
                         COLOR_STRING "%s" COLOR_RESET, application.args.conf_arg[i]);
-                args_parser_free(&application.args);
-                return CODE_ERROR_ARGUMENTS;
+                exit(STATION_APP_ERROR_ARGUMENTS);
             }
         }
     }
 
-    ////////////////////////////////////
-    // Continue with parsed arguments //
-    ////////////////////////////////////
+    //////////////////////////////////////
+    // Preprocess application arguments //
+    //////////////////////////////////////
 
-    int code = with_args();
+    application.verbose = application.args.verbose_given;
 
-    ///////////////////////////////////
-    // Release application arguments //
-    ///////////////////////////////////
+    if (!application.args.threads_given)
+        application.args.threads_arg = 0;
 
-    bool verbose = application.args.verbose_given;
-    args_parser_free(&application.args);
-
-    /////////////////////////
-    // Print final message //
-    /////////////////////////
-
-    if (verbose)
-        PRINT("\nApplication terminated normally.\n");
-
-    return code;
-}
-
-
-static int with_args(void)
-{
     //////////////////////
     // Display the logo //
     //////////////////////
@@ -314,20 +377,12 @@ static int with_args(void)
     // Display application version and feature support //
     /////////////////////////////////////////////////////
 
-    if (application.args.verbose_given)
+    if (application.verbose)
     {
         PRINT_("Version : " COLOR_VERSION "%u" COLOR_RESET "\n", STATION_PLUGIN_VERSION);
 
         PRINT("Signals : ");
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-        PRINT(COLOR_FLAG_ON "supported");
-#else
-        PRINT(COLOR_FLAG_OFF "not supported");
-#endif
-        PRINT(COLOR_RESET "\n");
-
-        PRINT("SDL     : ");
-#ifdef STATION_IS_SDL_SUPPORTED
         PRINT(COLOR_FLAG_ON "supported");
 #else
         PRINT(COLOR_FLAG_OFF "not supported");
@@ -342,23 +397,16 @@ static int with_args(void)
 #endif
         PRINT(COLOR_RESET "\n");
 
+        PRINT("SDL     : ");
+#ifdef STATION_IS_SDL_SUPPORTED
+        PRINT(COLOR_FLAG_ON "supported");
+#else
+        PRINT(COLOR_FLAG_OFF "not supported");
+#endif
+        PRINT(COLOR_RESET "\n");
+
         PRINT("\n");
     }
-
-    ////////////////////////////////////////
-    // Assign default values to arguments //
-    ////////////////////////////////////////
-
-    if (!application.args.threads_given)
-        application.args.threads_arg = 0;
-
-#ifdef STATION_IS_SDL_SUPPORTED
-    if (!application.args.window_width_given)
-        application.args.window_width_arg = 0;
-
-    if (!application.args.window_height_given)
-        application.args.window_height_arg = 0;
-#endif
 
     ////////////////////////////////////////////////
     // Check correctness of application arguments //
@@ -368,14 +416,14 @@ static int with_args(void)
     {
         if (application.args.inputs_num != 0)
         {
-            ERROR("processing a plugin file while displaying list of OpenCL platforms/devices is not supported");
-            return CODE_ERROR_ARGUMENTS;
+            ERROR("processing a plugin file after displaying list of OpenCL platforms/devices is not supported");
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
         if (application.args.help_given)
         {
-            ERROR("displaying list of OpenCL platforms/devices is mutually exclusive with help mode");
-            return CODE_ERROR_ARGUMENTS;
+            ERROR("OpenCL listing mode is mutually exclusive with help mode");
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
     }
     else if (application.args.help_given)
@@ -383,12 +431,7 @@ static int with_args(void)
         if (application.args.inputs_num > 1)
         {
             ERROR("cannot process more than one plugin file");
-            return CODE_ERROR_ARGUMENTS;
-        }
-        else if (application.args.inputs_num == 0)
-        {
-            args_parser_print_help();
-            return CODE_OK;
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
     }
     else
@@ -396,13 +439,13 @@ static int with_args(void)
         if (application.args.inputs_num > 1)
         {
             ERROR("cannot process more than one plugin file");
-            return CODE_ERROR_ARGUMENTS;
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
         if (application.args.threads_arg < 0)
         {
             ERROR("number of threads cannot be negative");
-            return CODE_ERROR_ARGUMENTS;
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
@@ -421,7 +464,7 @@ static int with_args(void)
             {
                 ERROR_("OpenCL platform index is empty (context argument ["
                         COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                return CODE_ERROR_ARGUMENTS;
+                exit(STATION_APP_ERROR_ARGUMENTS);
             }
 
             char *platform_idx_end;
@@ -434,7 +477,7 @@ static int with_args(void)
                         COLOR_NUMBER "%u" COLOR_RESET "])",
                         (int)(separator - application.args.cl_context_arg[i]),
                         application.args.cl_context_arg[i], i);
-                return CODE_ERROR_ARGUMENTS;
+                exit(STATION_APP_ERROR_ARGUMENTS);
             }
 
             if (device_mask != NULL)
@@ -445,38 +488,35 @@ static int with_args(void)
                 {
                     ERROR_("OpenCL device mask cannot be empty (context argument ["
                             COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                    return CODE_ERROR_ARGUMENTS;
+                    exit(STATION_APP_ERROR_ARGUMENTS);
                 }
                 else if (strspn(device_mask, "0123456789ABCDEFabcdef") != device_mask_len)
                 {
                     ERROR_("OpenCL device mask contains invalid characters: "
                             COLOR_NUMBER "%s" COLOR_RESET " (context argument ["
                             COLOR_NUMBER "%u" COLOR_RESET "])", device_mask, i);
-                    return CODE_ERROR_ARGUMENTS;
+                    exit(STATION_APP_ERROR_ARGUMENTS);
                 }
                 else if (strspn(device_mask, "0") == device_mask_len)
                 {
                     ERROR_("OpenCL device mask cannot be zero (context argument ["
                             COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                    return CODE_ERROR_ARGUMENTS;
+                    exit(STATION_APP_ERROR_ARGUMENTS);
                 }
             }
         }
 #endif
+    }
 
-#ifdef STATION_IS_SDL_SUPPORTED
-        if (application.args.window_width_given && (application.args.window_width_arg <= 0))
-        {
-            ERROR("window width must be positive");
-            return CODE_ERROR_ARGUMENTS;
-        }
+    ////////////////////////////////////
+    // Display application usage help //
+    ////////////////////////////////////
 
-        if (application.args.window_height_given && (application.args.window_height_arg <= 0))
-        {
-            ERROR("window height must be positive");
-            return CODE_ERROR_ARGUMENTS;
-        }
-#endif
+    if (application.args.help_given && (application.args.inputs_num == 0))
+    {
+        args_parser_print_help();
+
+        exit(EXIT_SUCCESS);
     }
 
     //////////////////////////////////////////////
@@ -486,127 +526,9 @@ static int with_args(void)
 #ifdef STATION_IS_OPENCL_SUPPORTED
     if (application.args.cl_list_given)
     {
-        cl_int ret;
+        display_opencl_listing();
 
-        cl_uint num_platforms;
-
-        ret = clGetPlatformIDs(0, (cl_platform_id*)NULL, &num_platforms);
-        if (ret != CL_SUCCESS)
-        {
-            ERROR("couldn't obtain number of OpenCL platforms");
-            return CODE_ERROR_OPENCL;
-        }
-
-        PRINT_("Number of OpenCL platforms: " COLOR_NUMBER "%u" COLOR_RESET "\n", num_platforms);
-
-        cl_platform_id *platform_list = malloc(sizeof(cl_platform_id) * num_platforms);
-        if (platform_list == NULL)
-        {
-            ERROR("couldn't allocate OpenCL platform list");
-            return CODE_ERROR_MALLOC;
-        }
-
-        ret = clGetPlatformIDs(num_platforms, platform_list, (cl_uint*)NULL);
-        if (ret != CL_SUCCESS)
-        {
-            ERROR("couldn't obtain OpenCL platform list");
-            free(platform_list);
-            return CODE_ERROR_OPENCL;
-        }
-
-        cl_uint device_list_size = 0;
-        cl_device_id *device_list = NULL;
-
-        for (cl_uint platform_idx = 0; platform_idx < num_platforms; platform_idx++)
-        {
-            {
-                char name[256] = {0};
-
-                ret = clGetPlatformInfo(platform_list[platform_idx],
-                        CL_PLATFORM_NAME, sizeof(name)-1, name, (size_t*)NULL);
-                if (ret != CL_SUCCESS)
-                {
-                    ERROR_("couldn't obtain name of OpenCL platform #"
-                            COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
-                    free(platform_list);
-                    free(device_list);
-                    return CODE_ERROR_OPENCL;
-                }
-
-                PRINT_("#" COLOR_NUMBER "%x" COLOR_RESET ": "
-                        COLOR_STRING "%s" COLOR_RESET "\n", platform_idx, name);
-            }
-
-            if (application.args.cl_list_arg == cl_list_arg_devices)
-            {
-                cl_uint num_devices;
-
-                ret = clGetDeviceIDs(platform_list[platform_idx],
-                        CL_DEVICE_TYPE_DEFAULT, 0, (cl_device_id*)NULL, &num_devices);
-                if (ret != CL_SUCCESS)
-                {
-                    ERROR_("couldn't obtain number of OpenCL devices for platform #"
-                            COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
-                    free(platform_list);
-                    free(device_list);
-                    return CODE_ERROR_OPENCL;
-                }
-
-                PRINT_("  number of devices: " COLOR_NUMBER "%u" COLOR_RESET "\n", num_devices);
-
-                if (num_devices > device_list_size)
-                {
-                    cl_device_id *new_device_list = realloc(device_list,
-                            sizeof(cl_device_id) * num_devices);
-                    if (new_device_list == NULL)
-                    {
-                        ERROR("couldn't allocate OpenCL device list");
-                        free(platform_list);
-                        free(device_list);
-                        return CODE_ERROR_MALLOC;
-                    }
-
-                    device_list_size = num_devices;
-                    device_list = new_device_list;
-                }
-
-                ret = clGetDeviceIDs(platform_list[platform_idx],
-                        CL_DEVICE_TYPE_DEFAULT, num_devices, device_list, (cl_uint*)NULL);
-                if (ret != CL_SUCCESS)
-                {
-                    ERROR_("couldn't obtain OpenCL device list for platform #"
-                            COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
-                    free(platform_list);
-                    free(device_list);
-                    return CODE_ERROR_OPENCL;
-                }
-
-                for (cl_uint device_idx = 0; device_idx < num_devices; device_idx++)
-                {
-                    char name[256] = {0};
-
-                    clGetDeviceInfo(device_list[device_idx],
-                            CL_DEVICE_NAME, sizeof(name)-1, name, (size_t*)NULL);
-                    if (ret != CL_SUCCESS)
-                    {
-                        ERROR_("couldn't obtain name of OpenCL device #"
-                                COLOR_NUMBER "%x" COLOR_RESET " for platform #"
-                                COLOR_NUMBER "%x" COLOR_RESET, device_idx, platform_idx);
-                        free(platform_list);
-                        free(device_list);
-                        return CODE_ERROR_OPENCL;
-                    }
-
-                    PRINT_("    #" COLOR_NUMBER "%x" COLOR_RESET ": "
-                            COLOR_STRING "%s" COLOR_RESET "\n", device_idx, name);
-                }
-            }
-        }
-
-        free(platform_list);
-        free(device_list);
-
-        return CODE_OK;
+        exit(EXIT_SUCCESS);
     }
 #endif
 
@@ -616,29 +538,29 @@ static int with_args(void)
 
     if (application.args.inputs_num == 0)
     {
-        if (application.args.verbose_given)
+        if (application.verbose)
             PRINT("Plugin file is not specified, exiting.\n");
 
-        return CODE_OK;
+        exit(EXIT_SUCCESS);
     }
 
-    ///////////////////////
-    // Display arguments //
-    ///////////////////////
+    ///////////////////////////////////////
+    // Display plugin file and arguments //
+    ///////////////////////////////////////
 
-    if (application.args.verbose_given)
+    if (application.verbose)
     {
-        PRINT_("Plugin: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.inputs[0]);
+        PRINT_("Plugin file: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.inputs[0]);
         if (application.plugin.argc > 0)
         {
-            PRINT_("  with " COLOR_NUMBER "%i" COLOR_RESET " arguments:\n",
+            PRINT_("  " COLOR_NUMBER "%i" COLOR_RESET " arguments:\n",
                     application.plugin.argc);
             for (int i = 0; i < application.plugin.argc; i++)
                 PRINT_("    [" COLOR_NUMBER "%i" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n", i, application.plugin.argv[i]);
         }
         else
-            PRINT("  with no arguments\n");
+            PRINT("  no arguments\n");
 
         PRINT("\n");
     }
@@ -651,55 +573,36 @@ static int with_args(void)
     if (application.plugin.handle == NULL)
     {
         ERROR_("couldn't load plugin " COLOR_STRING "%s" COLOR_RESET, application.args.inputs[0]);
-        return CODE_ERROR_PLUGIN;
+        exit(STATION_APP_ERROR_PLUGIN);
     }
+    AT_EXIT(exit_unload_plugin);
 
-    /////////////////////////////////
-    // Continue with loaded plugin //
-    /////////////////////////////////
-
-    int code = with_plugin();
-
-    ////////////////////////
-    // Unload plugin file //
-    ////////////////////////
-
-    dlclose(application.plugin.handle);
-
-    return code;
-}
-
-
-static int with_plugin(void)
-{
     /////////////////////////
     // Check plugin format //
     /////////////////////////
 
+    application.plugin.format = dlsym(application.plugin.handle,
+            STRINGIFY(STATION_PLUGIN_FORMAT_OBJECT));
+    if (application.plugin.format == NULL)
     {
-        application.plugin.format = dlsym(application.plugin.handle,
-                STRINGIFY(STATION_PLUGIN_FORMAT_OBJECT));
-        if (application.plugin.format == NULL)
-        {
-            ERROR("couldn't obtain plugin format");
-            return CODE_ERROR_PLUGIN;
-        }
+        ERROR("couldn't obtain plugin format");
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
 
-        if (application.plugin.format->signature != STATION_PLUGIN_SIGNATURE)
-        {
-            ERROR_("plugin signature (" COLOR_VERSION "0x%X" COLOR_RESET
-                    ") is wrong (must be " COLOR_VERSION "0x%X" COLOR_RESET ")",
-                    application.plugin.format->signature, STATION_PLUGIN_SIGNATURE);
-            return CODE_ERROR_PLUGIN;
-        }
+    if (application.plugin.format->signature != STATION_PLUGIN_SIGNATURE)
+    {
+        ERROR_("plugin signature (" COLOR_VERSION "0x%X" COLOR_RESET
+                ") is wrong (must be " COLOR_VERSION "0x%X" COLOR_RESET ")",
+                application.plugin.format->signature, STATION_PLUGIN_SIGNATURE);
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
 
-        if (application.plugin.format->version != STATION_PLUGIN_VERSION)
-        {
-            ERROR_("plugin version (" COLOR_VERSION "%u" COLOR_RESET
-                    ") is different from application version (" COLOR_VERSION "%u" COLOR_RESET ")",
-                    application.plugin.format->version, STATION_PLUGIN_VERSION);
-            return CODE_ERROR_PLUGIN;
-        }
+    if (application.plugin.format->version != STATION_PLUGIN_VERSION)
+    {
+        ERROR_("plugin version (" COLOR_VERSION "%u" COLOR_RESET
+                ") is different from application version (" COLOR_VERSION "%u" COLOR_RESET ")",
+                application.plugin.format->version, STATION_PLUGIN_VERSION);
+        exit(STATION_APP_ERROR_PLUGIN);
     }
 
     //////////////////////////
@@ -711,151 +614,119 @@ static int with_plugin(void)
     if (application.plugin.vtable == NULL)
     {
         ERROR("couldn't obtain plugin vtable");
-        return CODE_ERROR_PLUGIN;
+        exit(STATION_APP_ERROR_PLUGIN);
     }
 
-    if ((application.plugin.vtable->help_fn == NULL) ||
+    if ((application.plugin.vtable->name == NULL) ||
+            (application.plugin.vtable->help_fn == NULL) ||
+            (application.plugin.vtable->conf_fn == NULL) ||
             (application.plugin.vtable->init_fn == NULL) ||
             (application.plugin.vtable->final_fn == NULL))
     {
         ERROR("plugin vtable contains NULL pointers");
-        return CODE_ERROR_PLUGIN;
+        exit(STATION_APP_ERROR_PLUGIN);
     }
 
-    //////////////////////////////////
-    // Display help if in help mode //
-    //////////////////////////////////
+    if (application.verbose)
+        PRINT_("Plugin name: " COLOR_STRING "%s" COLOR_RESET "\n\n",
+                application.plugin.vtable->name);
+
+    ///////////////////////////////
+    // Display plugin usage help //
+    ///////////////////////////////
 
     if (application.args.help_given)
     {
-        if (application.args.verbose_given)
+        if (application.verbose)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin help >>>\n");
             PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+
+            AT_EXIT(exit_end_plugin_help_fn_output);
+            AT_QUICK_EXIT(exit_end_plugin_help_fn_output);
         }
 
-        int code = application.plugin.vtable->help_fn(application.plugin.argc, application.plugin.argv);
+        application.plugin.vtable->help_fn(application.plugin.argc, application.plugin.argv);
 
-        if (application.args.verbose_given)
-        {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-            PRINT("<<< End of plugin help >>>\n" COLOR_RESET);
-        }
+        if (application.verbose)
+            exit_end_plugin_help_fn_output();
 
-        return code;
+        exit(EXIT_SUCCESS);
     }
 
+    ////////////////////////////////////////
+    // Call plugin configuration function //
+    ////////////////////////////////////////
+
+    application.plugin.configuration.signals = &application.signal.set;
+    application.plugin.configuration.num_threads = application.args.threads_arg;
+
+    if (application.verbose)
     {
-        //////////////////////////////////////////////////////////
-        // Prepare arguments for plugin initialization function //
-        //////////////////////////////////////////////////////////
+        PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin configuration >>>\n");
+        PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
 
-        if (application.signal.set_ptr != NULL)
-        {
-#define WATCH_SIGNAL(signame)                       \
-            if (application.args.signame##_given)   \
-                application.signal.set.signal_##signame = true;
-
-            WATCH_SIGNAL(SIGHUP)
-            WATCH_SIGNAL(SIGINT)
-            WATCH_SIGNAL(SIGQUIT)
-            WATCH_SIGNAL(SIGUSR1)
-            WATCH_SIGNAL(SIGUSR2)
-            WATCH_SIGNAL(SIGALRM)
-            WATCH_SIGNAL(SIGTERM)
-            WATCH_SIGNAL(SIGTSTP)
-            WATCH_SIGNAL(SIGTTIN)
-            WATCH_SIGNAL(SIGTTOU)
-            WATCH_SIGNAL(SIGWINCH)
-
-#undef WATCH_SIGNAL
-        }
-
-        if (application.args.no_sdl_given)
-            application.sdl.properties_ptr = NULL;
-
-        if (application.sdl.properties_ptr != NULL)
-        {
-            application.sdl.properties.window_width = application.args.window_width_arg;
-            application.sdl.properties.window_height = application.args.window_height_arg;
-            application.sdl.properties.window_resizable = application.args.window_resizable_given;
-            application.sdl.properties.window_shown = application.args.window_shown_given;
-            application.sdl.properties.window_title = application.args.window_title_arg;
-        }
-
-        station_plugin_init_func_args_t plugin_init_func_args = {
-            .fsm_num_threads = application.args.threads_arg,
-            .signals = application.signal.set_ptr,
-            .sdl_properties = application.sdl.properties_ptr,
-            .future_sdl_context = application.sdl.context_ptr,
-            .future_opencl_context = application.opencl.context_ptr,
-        };
-
-        ///////////////////////
-        // Initialize plugin //
-        ///////////////////////
-
-        if (application.args.verbose_given)
-        {
-            PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin initialization >>>\n");
-            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
-        }
-
-        int init_code = application.plugin.vtable->init_fn(&plugin_init_func_args,
-                application.plugin.argc, application.plugin.argv);
-
-        if (application.args.verbose_given)
-        {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-            PRINT("<<< End of plugin initialization >>>\n" COLOR_RESET);
-        }
-
-        if (init_code != 0)
-            return CODE_ERROR_USER + init_code;
-
-        ///////////////////////////////////////////////////////
-        // Configure the application as the plugin specified //
-        ///////////////////////////////////////////////////////
-
-        application.plugin.resources = plugin_init_func_args.plugin_resources;
-
-        application.fsm.initial_state = plugin_init_func_args.fsm_initial_state;
-        application.fsm.data = plugin_init_func_args.fsm_data;
-        application.fsm.num_threads = plugin_init_func_args.fsm_num_threads;
-
-        if (plugin_init_func_args.signals_not_needed)
-            application.signal.set_ptr = NULL;
-
-        if (plugin_init_func_args.sdl_not_needed)
-            application.sdl.properties_ptr = NULL;
-
-        if (plugin_init_func_args.opencl_not_needed)
-            application.opencl.not_needed = true;
-
-        /////////////////////////////////////////
-        // Assign default values to properties //
-        /////////////////////////////////////////
-
-        if (application.sdl.properties_ptr != NULL)
-        {
-            if (application.sdl.properties.window_title == NULL)
-                application.sdl.properties.window_title = application.args.inputs[0];
-        }
+        AT_EXIT(exit_end_plugin_conf_fn_output);
+        AT_QUICK_EXIT(exit_end_plugin_conf_fn_output);
     }
+
+    application.plugin.vtable->conf_fn(&application.plugin.configuration,
+            application.plugin.argc, application.plugin.argv);
+
+    if (application.verbose)
+        exit_end_plugin_conf_fn_output();
+
+    application.parallel_processing.num_threads = application.plugin.configuration.num_threads;
+
+    ///////////////////////////////////
+    // Process application arguments //
+    ///////////////////////////////////
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+#  define WATCH_SIGNAL(signame) do {                    \
+    if (application.args.signame##_given) {             \
+        application.signal.set.signal_##signame = true; \
+        application.signal.management_used = true;      \
+    } else if (application.signal.set.signal_##signame) \
+        application.signal.management_used = true; } while (0)
+
+    WATCH_SIGNAL(SIGHUP);
+    WATCH_SIGNAL(SIGINT);
+    WATCH_SIGNAL(SIGQUIT);
+    WATCH_SIGNAL(SIGUSR1);
+    WATCH_SIGNAL(SIGUSR2);
+    WATCH_SIGNAL(SIGALRM);
+    WATCH_SIGNAL(SIGTERM);
+    WATCH_SIGNAL(SIGTSTP);
+    WATCH_SIGNAL(SIGTTIN);
+    WATCH_SIGNAL(SIGTTOU);
+    WATCH_SIGNAL(SIGWINCH);
+
+#  undef WATCH_SIGNAL
+#endif
+
+#ifndef STATION_IS_OPENCL_SUPPORTED
+    application.plugin.configuration.opencl_is_used = false;
+#endif
+
+#ifndef STATION_IS_SDL_SUPPORTED
+    application.plugin.configuration.sdl_is_used = false;
+#else
+    if (application.args.no_sdl_given)
+        application.plugin.configuration.sdl_is_used = false;
+#endif
 
     ///////////////////////////////////////
     // Display application configuration //
     ///////////////////////////////////////
 
-    if (application.args.verbose_given)
+    if (application.verbose)
     {
         PRINT("\n");
 
-        PRINT_("Threads : " COLOR_NUMBER "%u" COLOR_RESET "\n", application.fsm.num_threads);
-
-        if (application.signal.set_ptr != NULL)
+        if (application.signal.management_used)
         {
-            PRINT("Signals :");
+            PRINT("Signals:");
 
 #define PRINT_SIGNAL(signame)                               \
             if (application.signal.set.signal_##signame)    \
@@ -878,34 +749,14 @@ static int with_plugin(void)
             PRINT("\n");
         }
 
-        if (application.sdl.properties_ptr != NULL)
-        {
-            PRINT_("[SDL] Texture : " COLOR_NUMBER "%u" COLOR_RESET "x" COLOR_NUMBER "%u" COLOR_RESET "\n",
-                    application.sdl.properties.texture_width,
-                    application.sdl.properties.texture_height);
-
-            PRINT("[SDL] Window  : " COLOR_NUMBER);
-
-            if (application.sdl.properties.window_width > 0)
-                PRINT_("%u", application.sdl.properties.window_width);
-            else
-                PRINT_("{%u}", application.sdl.properties.texture_width);
-
-            PRINT(COLOR_RESET "x" COLOR_NUMBER);
-
-            if (application.sdl.properties.window_height > 0)
-                PRINT_("%u", application.sdl.properties.window_height);
-            else
-                PRINT_("{%u}", application.sdl.properties.texture_height);
-
-            PRINT_(COLOR_RESET ", %s" COLOR_RESET "\n", application.sdl.properties.window_resizable ?
-                    COLOR_FLAG_ON "resizable" : COLOR_FLAG_OFF "not resizable");
-        }
+        if (application.parallel_processing.num_threads > 0)
+            PRINT_("Threads: " COLOR_NUMBER "%u" COLOR_RESET "\n",
+                    application.parallel_processing.num_threads);
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-        if (!application.opencl.not_needed)
+        if (application.plugin.configuration.opencl_is_used)
         {
-            PRINT_("[OpenCL] Contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
+            PRINT_("OpenCL contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
                     application.args.cl_context_given);
 
             if (application.args.cl_context_given)
@@ -933,309 +784,505 @@ static int with_plugin(void)
         }
 #endif
 
+#ifdef STATION_IS_SDL_SUPPORTED
+        if (application.plugin.configuration.sdl_is_used)
+        {
+            PRINT("SDL subsystems:");
+
+            if ((application.plugin.configuration.sdl_init_flags &
+                        SDL_INIT_EVERYTHING) == SDL_INIT_EVERYTHING)
+                PRINT(" " COLOR_SDL_SUBSYSTEM "EVERYTHING" COLOR_RESET "\n");
+            else
+            {
+#  define PRINT_SUBSYSTEM(name) \
+                if ((application.plugin.configuration.sdl_init_flags &  \
+                            SDL_INIT_##name) == SDL_INIT_##name)        \
+                    PRINT(" " COLOR_SDL_SUBSYSTEM #name COLOR_RESET);
+
+                PRINT_SUBSYSTEM(TIMER)
+                PRINT_SUBSYSTEM(AUDIO)
+                PRINT_SUBSYSTEM(VIDEO)
+                PRINT_SUBSYSTEM(JOYSTICK)
+                PRINT_SUBSYSTEM(HAPTIC)
+                PRINT_SUBSYSTEM(GAMECONTROLLER)
+                PRINT_SUBSYSTEM(EVENTS)
+
+#  undef PRINT_SUBSYSTEM
+
+                PRINT("\n");
+            }
+        }
+#endif
+
         PRINT("\n");
     }
 
-    ///////////////////////////////////////
-    // Continue with allocated resources //
-    ///////////////////////////////////////
-
-    int code = with_plugin_resources();
-
-    /////////////////////
-    // Finalize plugin //
-    /////////////////////
-
-    {
-        if (application.args.verbose_given)
-        {
-            PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin finalization >>>\n");
-            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
-        }
-
-        int final_code = application.plugin.vtable->final_fn(application.plugin.resources);
-
-        if (application.args.verbose_given)
-        {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-            PRINT("<<< End of plugin finalization >>>\n" COLOR_RESET);
-        }
-
-        if (code == CODE_OK)
-        {
-            if (final_code != 0)
-                code = CODE_ERROR_USER + final_code;
-        }
-    }
-
-    return code;
-}
-
-
-static int with_plugin_resources(void)
-{
     ////////////////////////////////////
     // Start signal management thread //
     ////////////////////////////////////
 
-    if (application.signal.set_ptr != NULL)
-    {
-        bool thread_needed = false;
-
-#define CHECK_SIGNAL(signame)                           \
-        if (application.signal.set.signal_##signame)    \
-            thread_needed = true;
-
-        CHECK_SIGNAL(SIGHUP)
-        CHECK_SIGNAL(SIGINT)
-        CHECK_SIGNAL(SIGQUIT)
-        CHECK_SIGNAL(SIGUSR1)
-        CHECK_SIGNAL(SIGUSR2)
-        CHECK_SIGNAL(SIGALRM)
-        CHECK_SIGNAL(SIGTERM)
-        CHECK_SIGNAL(SIGTSTP)
-        CHECK_SIGNAL(SIGTTIN)
-        CHECK_SIGNAL(SIGTTOU)
-        CHECK_SIGNAL(SIGWINCH)
-
-#undef CHECK_SIGNAL
-
-        if (thread_needed)
-        {
-            application.signal.management_context = station_signal_management_thread_start(
-                    &application.signal.set);
-
-            if (application.signal.management_context == NULL)
-            {
-                ERROR("couldn't configure signal management");
-                return CODE_ERROR_SIGNAL;
-            }
-        }
-    }
-
-    ///////////////////////////////////
-    // Continue with watched signals //
-    ///////////////////////////////////
-
-    int code = with_signals();
-
-    ///////////////////////////////////
-    // Stop signal management thread //
-    ///////////////////////////////////
-
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-    if (application.signal.management_context != NULL)
-        station_signal_management_thread_stop(application.signal.management_context);
+    if (application.signal.management_used)
+    {
+        application.signal.management_context =
+            station_signal_management_thread_start(&application.signal.set);
+
+        if (application.signal.management_context == NULL)
+        {
+            ERROR("couldn't configure signal management");
+            exit(STATION_APP_ERROR_SIGNAL);
+        }
+
+        AT_EXIT(exit_stop_signal_management_thread);
+        AT_QUICK_EXIT(exit_stop_signal_management_thread);
+    }
+#else
+    application.signal.set = (station_signal_set_t){0};
 #endif
 
-    return code;
-}
+    ////////////////////////////////////////
+    // Create parallel processing threads //
+    ////////////////////////////////////////
 
+    {
+        int code = station_parallel_processing_initialize_context(
+                &application.parallel_processing.context,
+                application.parallel_processing.num_threads);
 
-static int with_signals(void)
-{
+        if (code != 0)
+        {
+            ERROR_("couldn't create parallel processing threads, got error "
+                    COLOR_ERROR "%i" COLOR_RESET, code);
+            exit(STATION_APP_ERROR_THREADS);
+        }
+
+        AT_EXIT(exit_stop_threads);
+        AT_QUICK_EXIT(exit_stop_threads);
+    }
+
     ////////////////////////////
     // Create OpenCL contexts //
     ////////////////////////////
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-    if (!application.opencl.not_needed)
+    if (application.plugin.configuration.opencl_is_used)
     {
-        int code = CODE_OK;
+        AT_EXIT(exit_release_opencl);
+        AT_QUICK_EXIT(exit_release_opencl_quick);
 
-        cl_uint num_platforms = 0;
-        cl_platform_id *platform_list = NULL;
-        cl_uint *num_devices = NULL;
-        cl_device_id **device_list = NULL;
-
-        cl_int ret;
-
-        // Obtain platform list
-        ret = clGetPlatformIDs(0, (cl_platform_id*)NULL, &num_platforms);
-        if (ret != CL_SUCCESS)
-        {
-            ERROR("couldn't obtain number of OpenCL platforms");
-            code = CODE_ERROR_OPENCL;
-            goto opencl_cleanup;
-        }
-
-        platform_list = malloc(sizeof(cl_platform_id) * num_platforms);
-        if (platform_list == NULL)
-        {
-            ERROR("couldn't allocate OpenCL platform list");
-            code = CODE_ERROR_MALLOC;
-            goto opencl_cleanup;
-        }
-
-        ret = clGetPlatformIDs(num_platforms, platform_list, (cl_uint*)NULL);
-        if (ret != CL_SUCCESS)
-        {
-            ERROR("couldn't obtain OpenCL platform list");
-            code = CODE_ERROR_OPENCL;
-            goto opencl_cleanup;
-        }
-
-        // Obtain sizes of device lists
-        num_devices = malloc(sizeof(cl_uint) * num_platforms);
-        if (num_devices == NULL)
-        {
-            ERROR("couldn't allocate list of numbers of OpenCL devices");
-            code = CODE_ERROR_MALLOC;
-            goto opencl_cleanup;
-        }
-
-        for (cl_uint platform_idx = 0; platform_idx < num_platforms; platform_idx++)
-        {
-            ret = clGetDeviceIDs(platform_list[platform_idx], CL_DEVICE_TYPE_DEFAULT,
-                    0, (cl_device_id*)NULL, &num_devices[platform_idx]);
-            if (ret != CL_SUCCESS)
-            {
-                ERROR_("couldn't obtain number of OpenCL devices for platform #"
-                        COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
-                code = CODE_ERROR_OPENCL;
-                goto opencl_cleanup;
-            }
-        }
-
-        // Obtain device lists
-        device_list = malloc(sizeof(cl_device_id*) * num_platforms);
-        if (device_list == NULL)
-        {
-            ERROR("couldn't allocate list of OpenCL device lists");
-            code = CODE_ERROR_MALLOC;
-            goto opencl_cleanup;
-        }
-
-        for (cl_uint platform_idx = 0; platform_idx < num_platforms; platform_idx++)
-            device_list[platform_idx] = NULL;
-
-        for (cl_uint platform_idx = 0; platform_idx < num_platforms; platform_idx++)
-        {
-            device_list[platform_idx] = malloc(sizeof(cl_device_id) * num_devices[platform_idx]);
-            if (device_list[platform_idx] == NULL)
-            {
-                ERROR_("couldn't allocate OpenCL device list for platform #"
-                        COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
-                code = CODE_ERROR_MALLOC;
-                goto opencl_cleanup;
-            }
-
-            ret = clGetDeviceIDs(platform_list[platform_idx], CL_DEVICE_TYPE_DEFAULT,
-                    num_devices[platform_idx], device_list[platform_idx], (cl_uint*)NULL);
-            if (ret != CL_SUCCESS)
-            {
-                ERROR_("couldn't obtain OpenCL device list for platform #"
-                        COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
-                code = CODE_ERROR_OPENCL;
-                goto opencl_cleanup;
-            }
-        }
-
-        // Create OpenCL contexts
-        if (code == CODE_OK)
-            code = create_opencl_contexts(num_platforms, platform_list, num_devices, device_list);
-
-opencl_cleanup:
-        // Free temporary arrays
-        if (device_list != NULL)
-        {
-            for (cl_uint platform_idx = 0; platform_idx < num_platforms; platform_idx++)
-                free(device_list[platform_idx]);
-        }
-        free(device_list);
-        free(num_devices);
-        free(platform_list);
-
-        if (code != CODE_OK)
-            return code;
+        prepare_opencl_tmp_arrays();
+        create_opencl_contexts();
+        release_opencl_tmp_arrays();
     }
 #endif
 
-    ///////////////////////////////////////
-    // Continue with initialized context //
-    ///////////////////////////////////////
+    ///////////////////////////////
+    // Initialize SDL subsystems //
+    ///////////////////////////////
 
-    int code = with_opencl_contexts();
-
-    ////////////////////////////
-    // Release OpenCL context //
-    ////////////////////////////
-
-#ifdef STATION_IS_OPENCL_SUPPORTED
-    if (application.opencl.context.contexts != NULL)
+#ifdef STATION_IS_SDL_SUPPORTED
+    if (application.plugin.configuration.sdl_is_used)
     {
-        for (uint32_t i = 0; i < application.opencl.context.num_platforms; i++)
-            if (application.opencl.context.contexts[i] != NULL)
-                clReleaseContext(application.opencl.context.contexts[i]);
+        if (SDL_Init(application.plugin.configuration.sdl_init_flags) < 0)
+        {
+            ERROR("couldn't initialize SDL subsystems");
+            exit(STATION_APP_ERROR_SDL);
+        }
 
-        free(application.opencl.context.contexts);
-    }
-
-    if (application.opencl.context.platforms != NULL)
-    {
-        for (uint32_t i = 0; i < application.opencl.context.num_platforms; i++)
-            free(application.opencl.context.platforms[i].device_ids);
-
-        free(application.opencl.context.platforms);
+        AT_EXIT(exit_quit_sdl);
+        AT_QUICK_EXIT(exit_quit_sdl);
     }
 #endif
-
-    return code;
 }
 
-
-static int with_opencl_contexts(void)
+static void exit_release_args(void)
 {
+    args_parser_free(&application.args);
+}
+
+static void exit_unload_plugin(void)
+{
+    dlclose(application.plugin.handle);
+}
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+static void exit_stop_signal_management_thread(void)
+{
+    station_signal_management_thread_stop(application.signal.management_context);
+}
+#endif
+
+static void exit_stop_threads(void)
+{
+    station_parallel_processing_destroy_context(&application.parallel_processing.context);
+}
+
+#ifdef STATION_IS_SDL_SUPPORTED
+static void exit_quit_sdl(void)
+{
+    SDL_Quit();
+}
+#endif
+
+static void exit_end_plugin_help_fn_output(void)
+{
+    static bool job_done = false;
+    if (job_done)
+        return;
+    job_done = true;
+
+    PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
+    PRINT("<<< End of plugin help >>>\n" COLOR_RESET);
+}
+
+static void exit_end_plugin_conf_fn_output(void)
+{
+    static bool job_done = false;
+    if (job_done)
+        return;
+    job_done = true;
+
+    PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
+    PRINT("<<< End of plugin configuration >>>\n" COLOR_RESET);
+}
+
+/*****************************************************************************/
+
+static int run(void)
+{
+    ///////////////////////
+    // Initialize plugin //
+    ///////////////////////
+
+    {
+        station_plugin_init_func_inputs_t plugin_init_func_inputs = {
+            .cmdline = application.plugin.configuration.cmdline,
+            .signals = &application.signal.set,
+            .parallel_processing_context = &application.parallel_processing.context,
+            .opencl_context = &application.opencl.context,
+            .sdl_is_available = application.plugin.configuration.sdl_is_used,
+        };
+
+        station_plugin_init_func_outputs_t plugin_init_func_outputs = {0};
+
+        if (application.verbose)
+        {
+            PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin initialization >>>\n");
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+
+            AT_EXIT(exit_end_plugin_init_fn_output);
+            AT_QUICK_EXIT(exit_end_plugin_init_fn_output);
+        }
+
+        application.plugin.vtable->init_fn(&plugin_init_func_inputs, &plugin_init_func_outputs);
+
+        if (application.verbose)
+            exit_end_plugin_init_fn_output();
+
+        application.plugin.resources = plugin_init_func_outputs.plugin_resources;
+        application.fsm.state = plugin_init_func_outputs.fsm_initial_state;
+        application.fsm.data = plugin_init_func_outputs.fsm_data;
+
+        AT_EXIT(exit_finalize_plugin);
+        AT_QUICK_EXIT(exit_finalize_plugin_quick);
+    }
+
     //////////////////////////////////////
     // Execute the finite state machine //
     //////////////////////////////////////
 
     {
-        if (application.args.verbose_given)
+        if (application.verbose)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin execution >>>\n");
             PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+
+            AT_EXIT(exit_end_plugin_exec_fn_output);
+            AT_QUICK_EXIT(exit_end_plugin_exec_fn_output);
         }
 
-        uint8_t fsm_code;
+        while (application.fsm.state.sfunc != NULL)
+            application.fsm.state.sfunc(&application.fsm.state, application.fsm.data);
 
-        if (application.sdl.properties_ptr == NULL)
-            fsm_code = station_finite_state_machine(
-                    application.fsm.initial_state, application.fsm.data, application.fsm.num_threads);
-        else
-            fsm_code = station_finite_state_machine_sdl(
-                    application.fsm.initial_state, application.fsm.data, application.fsm.num_threads,
-                    application.sdl.properties_ptr, application.sdl.context_ptr);
+        if (application.verbose)
+            exit_end_plugin_exec_fn_output();
+    }
 
-        if (application.args.verbose_given)
+    return finalize(false);
+}
+
+static int finalize(bool quick)
+{
+    /////////////////////
+    // Finalize plugin //
+    /////////////////////
+
+    static bool job_done = false;
+    if (job_done)
+        return 0; // ignored
+    job_done = true;
+
+    if (application.verbose)
+    {
+        PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin finalization >>>\n");
+        PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+    }
+
+    int exit_code = application.plugin.vtable->final_fn(application.plugin.resources, quick);
+
+    if (application.verbose)
+    {
+        PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
+        PRINT("<<< End of plugin finalization >>>\n" COLOR_RESET);
+    }
+
+    return exit_code;
+}
+
+static void exit_finalize_plugin(void)
+{
+    finalize(false);
+}
+
+static void exit_finalize_plugin_quick(void)
+{
+    finalize(true);
+}
+
+static void exit_end_plugin_init_fn_output(void)
+{
+    static bool job_done = false;
+    if (job_done)
+        return;
+    job_done = true;
+
+    PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
+    PRINT("<<< End of plugin initialization >>>\n" COLOR_RESET);
+}
+
+static void exit_end_plugin_exec_fn_output(void)
+{
+    static bool job_done = false;
+    if (job_done)
+        return;
+    job_done = true;
+
+    PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
+    PRINT("<<< End of plugin execution >>>\n" COLOR_RESET);
+}
+
+/*****************************************************************************/
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+
+static void display_opencl_listing(void)
+{
+    cl_int ret;
+
+    cl_uint num_platforms;
+
+    ret = clGetPlatformIDs(0, (cl_platform_id*)NULL, &num_platforms);
+    if (ret != CL_SUCCESS)
+    {
+        ERROR("couldn't obtain number of OpenCL platforms");
+        exit(STATION_APP_ERROR_OPENCL);
+    }
+
+    PRINT_("Number of OpenCL platforms: " COLOR_NUMBER "%u" COLOR_RESET "\n", num_platforms);
+
+    cl_platform_id *platform_list = malloc(sizeof(cl_platform_id) * num_platforms);
+    if (platform_list == NULL)
+    {
+        ERROR("couldn't allocate OpenCL platform list");
+        exit(STATION_APP_ERROR_MALLOC);
+    }
+
+    ret = clGetPlatformIDs(num_platforms, platform_list, (cl_uint*)NULL);
+    if (ret != CL_SUCCESS)
+    {
+        ERROR("couldn't obtain OpenCL platform list");
+        free(platform_list);
+        exit(STATION_APP_ERROR_OPENCL);
+    }
+
+    cl_uint device_list_size = 0;
+    cl_device_id *device_list = NULL;
+
+    for (cl_uint platform_idx = 0; platform_idx < num_platforms; platform_idx++)
+    {
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-            PRINT("<<< End of plugin execution >>>\n" COLOR_RESET);
+            char name[256] = {0};
+
+            ret = clGetPlatformInfo(platform_list[platform_idx],
+                    CL_PLATFORM_NAME, sizeof(name)-1, name, (size_t*)NULL);
+            if (ret != CL_SUCCESS)
+            {
+                ERROR_("couldn't obtain name of OpenCL platform #"
+                        COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+                free(platform_list);
+                free(device_list);
+                exit(STATION_APP_ERROR_OPENCL);
+            }
+
+            PRINT_("#" COLOR_NUMBER "%x" COLOR_RESET ": "
+                    COLOR_STRING "%s" COLOR_RESET "\n", platform_idx, name);
         }
 
-        if (fsm_code == STATION_FSM_EXEC_SUCCESS)
-            return CODE_OK;
-        else if (STATION_FSM_EXEC_IS_SDL_FAILED(fsm_code))
+        if (application.args.cl_list_arg == cl_list_arg_devices)
         {
-            ERROR_("finite state machine function returned code "
-                    COLOR_ERROR "%u" COLOR_RESET " (SDL failure)", fsm_code);
-            PRINT("\n");
-            return CODE_ERROR_FSM_SDL;
+            cl_uint num_devices;
+
+            ret = clGetDeviceIDs(platform_list[platform_idx],
+                    CL_DEVICE_TYPE_DEFAULT, 0, (cl_device_id*)NULL, &num_devices);
+            if (ret != CL_SUCCESS)
+            {
+                ERROR_("couldn't obtain number of OpenCL devices for platform #"
+                        COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+                free(platform_list);
+                free(device_list);
+                exit(STATION_APP_ERROR_OPENCL);
+            }
+
+            PRINT_("  number of devices: " COLOR_NUMBER "%u" COLOR_RESET "\n", num_devices);
+
+            if (num_devices > device_list_size)
+            {
+                cl_device_id *new_device_list = realloc(device_list,
+                        sizeof(cl_device_id) * num_devices);
+                if (new_device_list == NULL)
+                {
+                    ERROR("couldn't allocate OpenCL device list");
+                    free(platform_list);
+                    free(device_list);
+                    exit(STATION_APP_ERROR_MALLOC);
+                }
+
+                device_list_size = num_devices;
+                device_list = new_device_list;
+            }
+
+            ret = clGetDeviceIDs(platform_list[platform_idx],
+                    CL_DEVICE_TYPE_DEFAULT, num_devices, device_list, (cl_uint*)NULL);
+            if (ret != CL_SUCCESS)
+            {
+                ERROR_("couldn't obtain OpenCL device list for platform #"
+                        COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+                free(platform_list);
+                free(device_list);
+                exit(STATION_APP_ERROR_OPENCL);
+            }
+
+            for (cl_uint device_idx = 0; device_idx < num_devices; device_idx++)
+            {
+                char name[256] = {0};
+
+                clGetDeviceInfo(device_list[device_idx],
+                        CL_DEVICE_NAME, sizeof(name)-1, name, (size_t*)NULL);
+                if (ret != CL_SUCCESS)
+                {
+                    ERROR_("couldn't obtain name of OpenCL device #"
+                            COLOR_NUMBER "%x" COLOR_RESET " for platform #"
+                            COLOR_NUMBER "%x" COLOR_RESET, device_idx, platform_idx);
+                    free(platform_list);
+                    free(device_list);
+                    exit(STATION_APP_ERROR_OPENCL);
+                }
+
+                PRINT_("    #" COLOR_NUMBER "%x" COLOR_RESET ": "
+                        COLOR_STRING "%s" COLOR_RESET "\n", device_idx, name);
+            }
         }
-        else
+    }
+
+    free(platform_list);
+    free(device_list);
+}
+
+static void prepare_opencl_tmp_arrays(void)
+{
+    cl_int ret;
+
+    // Obtain platform list
+    ret = clGetPlatformIDs(0, (cl_platform_id*)NULL, &application.opencl.tmp.num_platforms);
+    if (ret != CL_SUCCESS)
+    {
+        ERROR("couldn't obtain number of OpenCL platforms");
+        exit(STATION_APP_ERROR_OPENCL);
+    }
+
+    application.opencl.tmp.platform_list = malloc(
+            sizeof(cl_platform_id) * application.opencl.tmp.num_platforms);
+    if (application.opencl.tmp.platform_list == NULL)
+    {
+        ERROR("couldn't allocate OpenCL platform list");
+        exit(STATION_APP_ERROR_MALLOC);
+    }
+
+    ret = clGetPlatformIDs(application.opencl.tmp.num_platforms,
+            application.opencl.tmp.platform_list, (cl_uint*)NULL);
+    if (ret != CL_SUCCESS)
+    {
+        ERROR("couldn't obtain OpenCL platform list");
+        exit(STATION_APP_ERROR_OPENCL);
+    }
+
+    // Obtain sizes of device lists
+    application.opencl.tmp.num_devices = malloc(
+            sizeof(cl_uint) * application.opencl.tmp.num_platforms);
+    if (application.opencl.tmp.num_devices == NULL)
+    {
+        ERROR("couldn't allocate list of numbers of OpenCL devices");
+        exit(STATION_APP_ERROR_MALLOC);
+    }
+
+    for (cl_uint platform_idx = 0; platform_idx < application.opencl.tmp.num_platforms; platform_idx++)
+    {
+        ret = clGetDeviceIDs(application.opencl.tmp.platform_list[platform_idx], CL_DEVICE_TYPE_DEFAULT,
+                0, (cl_device_id*)NULL, &application.opencl.tmp.num_devices[platform_idx]);
+        if (ret != CL_SUCCESS)
         {
-            ERROR_("finite state machine function returned code " COLOR_ERROR "%u" COLOR_RESET, fsm_code);
-            PRINT("\n");
-            return CODE_ERROR_FSM;
+            ERROR_("couldn't obtain number of OpenCL devices for platform #"
+                    COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+            exit(STATION_APP_ERROR_OPENCL);
+        }
+    }
+
+    // Obtain device lists
+    application.opencl.tmp.device_list = malloc(
+            sizeof(cl_device_id*) * application.opencl.tmp.num_platforms);
+    if (application.opencl.tmp.device_list == NULL)
+    {
+        ERROR("couldn't allocate list of OpenCL device lists");
+        exit(STATION_APP_ERROR_MALLOC);
+    }
+
+    for (cl_uint platform_idx = 0; platform_idx < application.opencl.tmp.num_platforms; platform_idx++)
+        application.opencl.tmp.device_list[platform_idx] = NULL;
+
+    for (cl_uint platform_idx = 0; platform_idx < application.opencl.tmp.num_platforms; platform_idx++)
+    {
+        application.opencl.tmp.device_list[platform_idx] = malloc(
+                sizeof(cl_device_id) * application.opencl.tmp.num_devices[platform_idx]);
+        if (application.opencl.tmp.device_list[platform_idx] == NULL)
+        {
+            ERROR_("couldn't allocate OpenCL device list for platform #"
+                    COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        ret = clGetDeviceIDs(application.opencl.tmp.platform_list[platform_idx], CL_DEVICE_TYPE_DEFAULT,
+                application.opencl.tmp.num_devices[platform_idx],
+                application.opencl.tmp.device_list[platform_idx], (cl_uint*)NULL);
+        if (ret != CL_SUCCESS)
+        {
+            ERROR_("couldn't obtain OpenCL device list for platform #"
+                    COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+            exit(STATION_APP_ERROR_OPENCL);
         }
     }
 }
 
-
-#ifdef STATION_IS_OPENCL_SUPPORTED
-static int create_opencl_contexts(
-        cl_uint num_platforms, cl_platform_id *platform_list,
-        cl_uint *num_devices, cl_device_id **device_list)
+static void create_opencl_contexts(void)
 {
     application.opencl.context.num_platforms = application.args.cl_context_given;
 
@@ -1245,19 +1292,20 @@ static int create_opencl_contexts(
     if (application.opencl.context.contexts == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platform contexts");
-        return CODE_ERROR_MALLOC;
+        exit(STATION_APP_ERROR_MALLOC);
     }
 
     for (cl_uint i = 0; i < application.opencl.context.num_platforms; i++)
         application.opencl.context.contexts[i] = NULL;
 
     // Allocate array of platforms
-    application.opencl.context.platforms = malloc(sizeof(*application.opencl.context.platforms) *
+    application.opencl.context.platforms = malloc(
+            sizeof(*application.opencl.context.platforms) *
             application.opencl.context.num_platforms);
     if (application.opencl.context.platforms == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platforms");
-        return CODE_ERROR_MALLOC;
+        exit(STATION_APP_ERROR_MALLOC);
     }
 
     for (cl_uint i = 0; i < application.opencl.context.num_platforms; i++)
@@ -1272,13 +1320,13 @@ static int create_opencl_contexts(
     {
         // Extract platform index
         cl_uint platform_idx = strtoul(application.args.cl_context_arg[i], (char**)NULL, 16);
-        if (platform_idx >= num_platforms)
+        if (platform_idx >= application.opencl.tmp.num_platforms)
         {
             ERROR_("OpenCL platform index #" COLOR_NUMBER "%x" COLOR_RESET
                     " is greater or equal to number of available platforms ("
                     COLOR_NUMBER "%u" COLOR_RESET ")",
-                    platform_idx, num_platforms);
-            return CODE_ERROR_ARGUMENTS;
+                    platform_idx, application.opencl.tmp.num_platforms);
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
         // Extract device mask
@@ -1291,11 +1339,13 @@ static int create_opencl_contexts(
         }
 
         // Copy platform ID
-        application.opencl.context.platforms[i].platform_id = platform_list[platform_idx];
+        application.opencl.context.platforms[i].platform_id =
+            application.opencl.tmp.platform_list[platform_idx];
 
         // Compute number of devices from device mask
         if (device_mask == NULL)
-            application.opencl.context.platforms[i].num_devices = num_devices[platform_idx];
+            application.opencl.context.platforms[i].num_devices =
+                application.opencl.tmp.num_devices[platform_idx];
         else
         {
             for (size_t m = 0; m < device_mask_len; m++)
@@ -1313,31 +1363,35 @@ static int create_opencl_contexts(
                     (int[16]){0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4}[chr];
             }
 
-            if (application.opencl.context.platforms[i].num_devices > num_devices[platform_idx])
+            if (application.opencl.context.platforms[i].num_devices >
+                    application.opencl.tmp.num_devices[platform_idx])
             {
                 ERROR_("OpenCL device mask " COLOR_NUMBER "%s" COLOR_RESET
                         " enables more devices than available ("
                         COLOR_NUMBER "%u" COLOR_RESET ") on platform #"
                         COLOR_NUMBER "%x" COLOR_RESET,
-                        device_mask, num_devices[platform_idx], platform_idx);
-                return CODE_ERROR_ARGUMENTS;
+                        device_mask, application.opencl.tmp.num_devices[platform_idx],
+                        platform_idx);
+                exit(STATION_APP_ERROR_ARGUMENTS);
             }
         }
 
         // Allocate array of devices
-        application.opencl.context.platforms[i].device_ids = malloc(sizeof(cl_device_id) *
-                application.opencl.context.platforms[i].num_devices);
+        application.opencl.context.platforms[i].device_ids = malloc(
+                sizeof(cl_device_id) * application.opencl.context.platforms[i].num_devices);
         if (application.opencl.context.platforms[i].device_ids == NULL)
         {
             ERROR("couldn't allocate array of OpenCL devices");
-            return CODE_ERROR_MALLOC;
+            exit(STATION_APP_ERROR_MALLOC);
         }
 
         // Copy device IDs
         if (device_mask == NULL)
         {
-            for (cl_uint device_idx = 0; device_idx < num_devices[platform_idx]; device_idx++)
-                application.opencl.context.platforms[i].device_ids[device_idx] = device_list[platform_idx][device_idx];
+            for (cl_uint device_idx = 0; device_idx <
+                    application.opencl.tmp.num_devices[platform_idx]; device_idx++)
+                application.opencl.context.platforms[i].device_ids[device_idx] =
+                    application.opencl.tmp.device_list[platform_idx][device_idx];
         }
         else
         {
@@ -1357,17 +1411,19 @@ static int create_opencl_contexts(
                 {
                     if (chr & 1)
                     {
-                        if (device_idx >= num_devices[platform_idx])
+                        if (device_idx >= application.opencl.tmp.num_devices[platform_idx])
                         {
                             ERROR_("OpenCL device index #" COLOR_NUMBER "%x" COLOR_RESET
                                     " is greater or equal to number of available devices ("
                                     COLOR_NUMBER "%u" COLOR_RESET ") on platform #"
                                     COLOR_NUMBER "%x" COLOR_RESET,
-                                    device_idx, num_devices[platform_idx], platform_idx);
-                            return CODE_ERROR_ARGUMENTS;
+                                    device_idx, application.opencl.tmp.num_devices[platform_idx],
+                                    platform_idx);
+                            exit(STATION_APP_ERROR_ARGUMENTS);
                         }
 
-                        application.opencl.context.platforms[i].device_ids[j++] = device_list[platform_idx][device_idx];
+                        application.opencl.context.platforms[i].device_ids[j++] =
+                            application.opencl.tmp.device_list[platform_idx][device_idx];
                     }
 
                     chr >>= 1;
@@ -1378,21 +1434,68 @@ static int create_opencl_contexts(
         // Create OpenCL context
         cl_int ret;
 
-        cl_context_properties context_properties[] = {
-            CL_CONTEXT_PLATFORM, (cl_context_properties)application.opencl.context.platforms[i].platform_id, 0};
+        cl_context_properties context_properties[] = {CL_CONTEXT_PLATFORM,
+            (cl_context_properties)application.opencl.context.platforms[i].platform_id, 0};
 
         application.opencl.context.contexts[i] = clCreateContext(context_properties,
-                application.opencl.context.platforms[i].num_devices, application.opencl.context.platforms[i].device_ids,
+                application.opencl.context.platforms[i].num_devices,
+                application.opencl.context.platforms[i].device_ids,
                 NULL, (void*)NULL, &ret);
         if (ret != CL_SUCCESS)
         {
             ERROR_("couldn't create OpenCL context for <" COLOR_NUMBER "%s" COLOR_RESET ">",
                     application.args.cl_context_arg[i]);
-            return CODE_ERROR_OPENCL;
+            exit(STATION_APP_ERROR_OPENCL);
         }
     }
-
-    return CODE_OK;
 }
+
+static void release_opencl_tmp_arrays(void)
+{
+    if (application.opencl.tmp.device_list != NULL)
+        for (cl_uint platform_idx = 0; platform_idx <
+                application.opencl.tmp.num_platforms; platform_idx++)
+            free(application.opencl.tmp.device_list[platform_idx]);
+
+    free(application.opencl.tmp.device_list);
+    free(application.opencl.tmp.num_devices);
+    free(application.opencl.tmp.platform_list);
+
+    application.opencl.tmp.num_platforms = 0;
+    application.opencl.tmp.platform_list = NULL;
+    application.opencl.tmp.num_devices = NULL;
+    application.opencl.tmp.device_list = NULL;
+}
+
+static void exit_release_opencl(void)
+{
+    exit_release_opencl_quick();
+
+    if (application.opencl.context.contexts != NULL)
+        free(application.opencl.context.contexts);
+
+    if (application.opencl.context.platforms != NULL)
+    {
+        for (uint32_t i = 0; i < application.opencl.context.num_platforms; i++)
+            free(application.opencl.context.platforms[i].device_ids);
+
+        free(application.opencl.context.platforms);
+    }
+
+    application.opencl.context.num_platforms = 0;
+
+    release_opencl_tmp_arrays();
+}
+
+static void exit_release_opencl_quick(void)
+{
+    if (application.opencl.context.contexts != NULL)
+    {
+        for (uint32_t i = 0; i < application.opencl.context.num_platforms; i++)
+            if (application.opencl.context.contexts[i] != NULL)
+                clReleaseContext(application.opencl.context.contexts[i]);
+    }
+}
+
 #endif
 

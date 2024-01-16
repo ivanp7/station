@@ -22,15 +22,14 @@
  * @brief Library implementation.
  */
 
+#include <station/parallel.fun.h>
+#include <station/parallel.typ.h>
+
 #include <station/signal.fun.h>
-#include <station/op.fun.h>
-#include <station/fsm.fun.h>
-
 #include <station/signal.typ.h>
-#include <station/state.typ.h>
-#include <station/sdl.typ.h>
 
-#include <station/fsm.def.h>
+#include <station/sdl.fun.h>
+#include <station/sdl.typ.h>
 
 #if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
 #  error "threads and/or atomics are not available"
@@ -54,6 +53,284 @@
 #  include <SDL_video.h>
 #  include <SDL_render.h>
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+// parallel.fun.h
+///////////////////////////////////////////////////////////////////////////////
+
+struct station_parallel_processing_threads_state {
+    struct {
+        station_threads_number_t num_threads;
+        thrd_t *threads;
+
+        atomic_bool ping_flag;
+        atomic_bool pong_flag;
+        bool ping_sense;
+        bool pong_sense;
+    } persistent;
+
+    bool terminate;
+
+    struct {
+        station_pfunc_t pfunc;
+        void *pfunc_data;
+
+        station_tasks_number_t num_tasks;
+        station_tasks_number_t batch_size;
+
+        atomic_uint done_tasks;
+        atomic_ushort thread_counter;
+    } current;
+};
+
+struct station_parallel_processing_thread_arg {
+    struct station_parallel_processing_threads_state *threads_state;
+    station_thread_idx_t thread_idx;
+};
+
+static
+int
+station_parallel_processing_thread(
+        void *arg)
+{
+    struct station_parallel_processing_threads_state *threads_state;
+    station_thread_idx_t thread_idx;
+    {
+        struct station_parallel_processing_thread_arg *thread_arg = arg;
+        assert(thread_arg != NULL);
+
+        threads_state = thread_arg->threads_state;
+        thread_idx = thread_arg->thread_idx;
+
+        free(thread_arg);
+    }
+
+    const station_threads_number_t thread_counter_last = threads_state->persistent.num_threads - 1;
+
+    station_pfunc_t pfunc;
+    void *pfunc_data;
+
+    station_tasks_number_t num_tasks;
+    station_tasks_number_t batch_size;
+
+    bool ping_sense = false, pong_sense = false;
+
+    while (true)
+    {
+        ping_sense = !ping_sense;
+        pong_sense = !pong_sense;
+
+        // Wait until signal
+        do
+        {
+#ifdef STATION_IS_THREAD_YIELD_ENABLED
+            thrd_yield();
+#endif
+        }
+        while (atomic_load_explicit(&threads_state->persistent.ping_flag,
+                    memory_order_relaxed) != ping_sense);
+
+        if (threads_state->terminate)
+            break;
+
+        pfunc = threads_state->current.pfunc;
+        pfunc_data = threads_state->current.pfunc_data;
+
+        num_tasks = threads_state->current.num_tasks;
+        batch_size = threads_state->current.batch_size;
+
+        // Acquire first task
+        station_task_idx_t task_idx = atomic_fetch_add_explicit(
+                &threads_state->current.done_tasks, batch_size, memory_order_relaxed);
+        station_tasks_number_t remaining_tasks = batch_size;
+
+        // Loop until no subtasks left
+        while (task_idx < num_tasks)
+        {
+            // Execute parallel processing function
+            pfunc(pfunc_data, task_idx, thread_idx);
+            remaining_tasks--;
+
+            // Acquire next task
+            if (remaining_tasks > 0)
+                task_idx++;
+            else
+            {
+                task_idx = atomic_fetch_add_explicit(
+                        &threads_state->current.done_tasks, batch_size, memory_order_relaxed);
+                remaining_tasks = batch_size;
+            }
+        }
+
+        // Wake master thread
+        if (atomic_fetch_add_explicit(&threads_state->current.thread_counter, 1,
+                    memory_order_relaxed) == thread_counter_last)
+            atomic_store_explicit(&threads_state->persistent.pong_flag,
+                    pong_sense, memory_order_relaxed);
+    }
+
+    return 0;
+}
+
+int
+station_parallel_processing_initialize_context(
+        station_parallel_processing_context_t *context,
+        station_threads_number_t num_threads)
+{
+    if (context == NULL)
+        return -1;
+
+    int code;
+
+    // Initialize threads state
+    struct station_parallel_processing_threads_state *threads_state = malloc(sizeof(*threads_state));
+    if (threads_state == NULL)
+        return 1;
+
+    threads_state->persistent.num_threads = num_threads;
+    threads_state->persistent.threads = NULL;
+    atomic_init(&threads_state->persistent.ping_flag, false);
+    atomic_init(&threads_state->persistent.pong_flag, false);
+    threads_state->persistent.ping_sense = false;
+    threads_state->persistent.pong_sense = false;
+    threads_state->terminate = false;
+
+    atomic_init(&threads_state->current.done_tasks, 0);
+    atomic_init(&threads_state->current.thread_counter, 0);
+
+    // Create threads
+    station_thread_idx_t thread_idx = 0;
+
+    if (num_threads > 0)
+    {
+        threads_state->persistent.threads = malloc(sizeof(thrd_t) * num_threads);
+        if (threads_state->persistent.threads == NULL)
+        {
+            code = 1;
+            goto cleanup;
+        }
+    }
+
+    for (thread_idx = 0; thread_idx < num_threads; thread_idx++)
+    {
+        struct station_parallel_processing_thread_arg *thread_arg = malloc(sizeof(*thread_arg));
+        if (thread_arg == NULL)
+        {
+            code = 1;
+            goto cleanup;
+        }
+
+        thread_arg->threads_state = threads_state;
+        thread_arg->thread_idx = thread_idx;
+
+        int res = thrd_create(&threads_state->persistent.threads[thread_idx],
+                station_parallel_processing_thread, thread_arg);
+
+        if (res != thrd_success)
+        {
+            free(thread_arg);
+
+            if (res == thrd_nomem)
+                code = 2;
+            else
+                code = 3;
+
+            goto cleanup;
+        }
+    }
+
+    context->state = threads_state;
+    context->num_threads = num_threads;
+
+    return 0;
+
+cleanup:
+    // Wake threads
+    threads_state->terminate = true;
+    atomic_store_explicit(&threads_state->persistent.ping_flag,
+            !threads_state->persistent.ping_sense, memory_order_relaxed);
+
+    for (station_threads_number_t i = 0; i < thread_idx; i++)
+        thrd_join(threads_state->persistent.threads[i], (int*)NULL);
+
+    free(threads_state->persistent.threads);
+    free(threads_state);
+
+    return code;
+}
+
+void
+station_parallel_processing_destroy_context(
+        station_parallel_processing_context_t *context)
+{
+    if ((context == NULL) || (context->state == NULL))
+        return;
+
+    context->state->terminate = true;
+    atomic_store_explicit(&context->state->persistent.ping_flag,
+            !context->state->persistent.ping_sense, memory_order_relaxed);
+
+    for (station_threads_number_t i = 0; i < context->state->persistent.num_threads; i++)
+        thrd_join(context->state->persistent.threads[i], (int*)NULL);
+
+    free(context->state->persistent.threads);
+    free(context->state);
+
+    context->state = NULL;
+    context->num_threads = 0;
+}
+
+void
+station_parallel_processing_execute(
+        station_parallel_processing_context_t *context,
+
+        station_pfunc_t pfunc,
+        void *pfunc_data,
+
+        station_tasks_number_t num_tasks,
+        station_tasks_number_t batch_size)
+{
+    if ((context == NULL) || (context->state == NULL) ||
+            (pfunc == NULL) || (num_tasks == 0))
+        return;
+
+    if (context->state->persistent.num_threads > 0)
+    {
+        if (batch_size == 0)
+            batch_size = (num_tasks - 1) / context->state->persistent.num_threads + 1;
+
+        context->state->current.pfunc = pfunc;
+        context->state->current.pfunc_data = pfunc_data;
+        context->state->current.num_tasks = num_tasks;
+        context->state->current.batch_size = batch_size;
+
+        context->state->current.done_tasks = 0;
+        context->state->current.thread_counter = 0;
+
+        bool ping_sense = context->state->persistent.ping_sense =
+            !context->state->persistent.ping_sense;
+        bool pong_sense = context->state->persistent.pong_sense =
+            !context->state->persistent.pong_sense;
+
+        // Wake slave threads
+        atomic_store_explicit(&context->state->persistent.ping_flag, ping_sense, memory_order_relaxed);
+
+        // Wait until all tasks are done
+        do
+        {
+#ifdef STATION_IS_THREAD_YIELD_ENABLED
+            thrd_yield();
+#endif
+        }
+        while (atomic_load_explicit(&context->state->persistent.pong_flag,
+                    memory_order_relaxed) != pong_sense);
+    }
+    else
+    {
+        for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
+            pfunc(pfunc_data, task_idx, 0);
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // signal.fun.h
@@ -118,6 +395,7 @@ station_signal_management_thread_start(
 {
 #ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     (void) signals;
+
     return NULL;
 #else
     if (signals == NULL)
@@ -171,7 +449,6 @@ station_signal_management_thread_stop(
 {
 #ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     (void) context;
-    return;
 #else
     if (context == NULL)
         return;
@@ -184,410 +461,186 @@ station_signal_management_thread_stop(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// op.fun.h
+// sdl.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
-struct station_fsm_context {
-    station_pfunc_t pfunc;
-    void *pfunc_data;
-
-    station_tasks_number_t num_tasks;
-    station_tasks_number_t batch_size;
-
-    atomic_uint done_tasks;
-    atomic_ushort thread_counter;
-
-    atomic_bool ping_flag;
-    atomic_bool pong_flag;
-    bool ping_sense;
-    bool pong_sense;
-
-    bool terminate;
-
-    station_threads_number_t num_threads;
-};
-
-void
-station_execute_pfunc(
-        station_pfunc_t pfunc,
-        void *pfunc_data,
-
-        station_tasks_number_t num_tasks,
-        station_tasks_number_t batch_size,
-
-        struct station_fsm_context *fsm_context)
-{
-    if ((pfunc == NULL) || (num_tasks == 0) || (fsm_context == NULL))
-        return;
-
-    const station_threads_number_t num_threads = fsm_context->num_threads;
-
-    if (num_threads > 0)
-    {
-        if (batch_size == 0)
-            batch_size = (num_tasks - 1) / num_threads + 1;
-
-        fsm_context->pfunc = pfunc;
-        fsm_context->pfunc_data = pfunc_data;
-        fsm_context->num_tasks = num_tasks;
-        fsm_context->batch_size = batch_size;
-
-        atomic_store_explicit(&fsm_context->done_tasks, 0, memory_order_relaxed);
-        atomic_store_explicit(&fsm_context->thread_counter, 0, memory_order_relaxed);
-
-        bool ping_sense = fsm_context->ping_sense = !fsm_context->ping_sense;
-        bool pong_sense = fsm_context->pong_sense = !fsm_context->pong_sense;
-
-        // Wake slave threads
-        atomic_store_explicit(&fsm_context->ping_flag, ping_sense, memory_order_relaxed);
-
-        // Wait until all tasks are done
-        do
-        {
-#ifdef STATION_IS_THREAD_YIELD_ENABLED
-            thrd_yield();
-#endif
-        }
-        while (atomic_load_explicit(&fsm_context->pong_flag, memory_order_relaxed) != pong_sense);
-    }
-    else
-    {
-        for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
-            pfunc(pfunc_data, task_idx, 0);
-    }
-}
-
-uint8_t
-station_sdl_lock_texture(
-        station_sdl_context_t *sdl_context,
-        const struct SDL_Rect *rectangle)
-{
-#ifndef STATION_IS_SDL_SUPPORTED
-    (void) sdl_context;
-    (void) rectangle;
-
-    return -1;
-#else
-    if ((sdl_context == NULL) || (sdl_context->texture == NULL) ||
-            (sdl_context->texture_lock_pixels != NULL))
-        return 1;
-
-    void *pixels;
-    int pitch;
-
-    if (SDL_LockTexture(sdl_context->texture, rectangle, &pixels, &pitch) < 0)
-        return 1;
-
-    sdl_context->texture_lock_rectangle = rectangle;
-    sdl_context->texture_lock_pixels = pixels;
-    sdl_context->texture_lock_pitch = pitch / sizeof(*sdl_context->texture_lock_pixels);
-
-    return 0;
-#endif
-}
-
-uint8_t
-station_sdl_unlock_texture_and_render(
-        station_sdl_context_t *sdl_context)
-{
-#ifndef STATION_IS_SDL_SUPPORTED
-    (void) sdl_context;
-
-    return -1;
-#else
-    if ((sdl_context == NULL) || (sdl_context->renderer == NULL) ||
-            (sdl_context->texture == NULL) || (sdl_context->texture_lock_pixels == NULL))
-        return 1;
-
-    SDL_UnlockTexture(sdl_context->texture);
-
-    sdl_context->texture_lock_rectangle = NULL;
-    sdl_context->texture_lock_pixels = NULL;
-    sdl_context->texture_lock_pitch = 0;
-
-    if (SDL_RenderCopy(sdl_context->renderer, sdl_context->texture,
-                (const SDL_Rect*)NULL, (const SDL_Rect*)NULL) < 0)
-        return 1;
-    SDL_RenderPresent(sdl_context->renderer);
-
-    return 0;
-#endif
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// fsm.fun.h
-///////////////////////////////////////////////////////////////////////////////
-
-struct station_thread_context {
-    struct station_fsm_context *fsm_context;
-    station_thread_idx_t thread_idx;
-};
-
-static
 int
-station_finite_state_machine_thread(
-        void *arg)
-{
-    struct station_fsm_context *fsm_context;
-    station_thread_idx_t thread_idx;
-    {
-        struct station_thread_context *thread_context = arg;
-        assert(thread_context != NULL);
-
-        fsm_context = thread_context->fsm_context;
-        thread_idx = thread_context->thread_idx;
-
-        free(thread_context);
-    }
-
-    const station_threads_number_t thread_counter_last = fsm_context->num_threads - 1;
-
-    station_pfunc_t pfunc;
-    void *pfunc_data;
-
-    station_tasks_number_t num_tasks;
-    station_tasks_number_t batch_size;
-
-    bool ping_sense = false, pong_sense = false;
-
-    while (true)
-    {
-        ping_sense = !ping_sense;
-        pong_sense = !pong_sense;
-
-        // Wait until signal
-        do
-        {
-#ifdef STATION_IS_THREAD_YIELD_ENABLED
-            thrd_yield();
-#endif
-        }
-        while (atomic_load_explicit(&fsm_context->ping_flag, memory_order_relaxed) != ping_sense);
-
-        if (fsm_context->terminate)
-            break;
-
-        pfunc = fsm_context->pfunc;
-        pfunc_data = fsm_context->pfunc_data;
-
-        num_tasks = fsm_context->num_tasks;
-        batch_size = fsm_context->batch_size;
-
-        // Acquire first task
-        station_task_idx_t task_idx = atomic_fetch_add_explicit(
-            &fsm_context->done_tasks, batch_size, memory_order_relaxed);
-        station_tasks_number_t remaining_tasks = batch_size;
-
-        // Loop until no subtasks left
-        while (task_idx < num_tasks)
-        {
-            // Execute parallel processing function
-            pfunc(pfunc_data, task_idx, thread_idx);
-            remaining_tasks--;
-
-            // Acquire next task
-            if (remaining_tasks > 0)
-                task_idx++;
-            else
-            {
-                task_idx = atomic_fetch_add_explicit(
-                        &fsm_context->done_tasks, batch_size, memory_order_relaxed);
-                remaining_tasks = batch_size;
-            }
-        }
-
-        // Wake master thread
-        if (atomic_fetch_add_explicit(&fsm_context->thread_counter, 1,
-                    memory_order_relaxed) == thread_counter_last)
-            atomic_store_explicit(&fsm_context->pong_flag, pong_sense, memory_order_relaxed);
-    }
-
-    return 0;
-}
-
-uint8_t
-station_finite_state_machine(
-        station_state_t state,
-        void *fsm_data,
-        station_threads_number_t num_threads)
-{
-    if (state.sfunc == NULL)
-        return STATION_FSM_EXEC_SUCCESS;
-
-    // Initialize context
-    struct station_fsm_context fsm_context = {
-        .num_threads = num_threads,
-    };
-
-    thrd_t *threads = NULL;
-    station_thread_idx_t thread_idx = 0;
-
-    uint8_t result = STATION_FSM_EXEC_SUCCESS;
-
-    // Create threads
-    if (num_threads > 0)
-    {
-        threads = malloc(sizeof(*threads) * num_threads);
-        if (threads == NULL)
-        {
-            result = STATION_FSM_EXEC_MALLOC_FAIL;
-            goto cleanup;
-        }
-    }
-
-    for (thread_idx = 0; thread_idx < num_threads; thread_idx++)
-    {
-        struct station_thread_context *thread_context = malloc(sizeof(*thread_context));
-        if (thread_context == NULL)
-        {
-            result = STATION_FSM_EXEC_MALLOC_FAIL;
-            goto cleanup;
-        }
-
-        thread_context->fsm_context = &fsm_context;
-        thread_context->thread_idx = thread_idx;
-
-        thrd_t thread;
-        int res = thrd_create(&thread, station_finite_state_machine_thread, thread_context);
-
-        if (res != thrd_success)
-        {
-            free(thread_context);
-
-            if (res == thrd_nomem)
-                result = STATION_FSM_EXEC_THRD_NOMEM;
-            else
-                result = STATION_FSM_EXEC_THRD_ERROR;
-
-            goto cleanup;
-        }
-
-        threads[thread_idx] = thread;
-    }
-
-    // Execute finite state machine
-    while (state.sfunc != NULL)
-        state.sfunc(&state, fsm_data, &fsm_context);
-
-cleanup:
-    // Wake slave threads and join
-    fsm_context.terminate = true;
-    atomic_store_explicit(&fsm_context.ping_flag, !fsm_context.ping_sense, memory_order_relaxed);
-
-    for (station_threads_number_t i = 0; i < thread_idx; i++)
-        thrd_join(threads[i], (int*)NULL);
-
-    free(threads);
-
-    return result;
-}
-
-uint8_t
-station_finite_state_machine_sdl(
-        station_state_t state,
-        void *fsm_data,
-        station_threads_number_t num_threads,
-
-        const station_sdl_properties_t *sdl_properties,
-        station_sdl_context_t *sdl_context)
+station_sdl_initialize_window_context(
+        station_sdl_window_context_t *context,
+        const station_sdl_window_properties_t *properties)
 {
 #ifndef STATION_IS_SDL_SUPPORTED
-    (void) sdl_properties;
-    (void) sdl_context;
+    (void) context;
+    (void) properties;
 
-    return station_finite_state_machine(state, fsm_data, num_threads);
+    return -2;
 #else
-    if ((sdl_context == NULL) || (sdl_properties == NULL) ||
-            (sdl_properties->texture_width == 0) || (sdl_properties->texture_height == 0))
-        return STATION_FSM_EXEC_INCORRECT_INPUTS;
+    if ((context == NULL) || (properties == NULL) ||
+            (properties->texture.width == 0) || (properties->texture.height == 0))
+        return -1;
 
-    // Initialize SDL and resources
-    if (SDL_Init(SDL_INIT_VIDEO | sdl_properties->sdl_init_flags) < 0)
-        return STATION_FSM_EXEC_SDL_INIT_FAIL;
+    int code;
 
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
     SDL_Texture *texture = NULL;
 
-    uint8_t result = STATION_FSM_EXEC_SUCCESS;
-
-    uint32_t window_flags = 0;
-    {
-        if (!sdl_properties->window_shown)
-            window_flags |= SDL_WINDOW_HIDDEN;
-
-        if (sdl_properties->window_resizable)
-            window_flags |= SDL_WINDOW_RESIZABLE;
-    }
-
-    window = SDL_CreateWindow(sdl_properties->window_title != NULL ? sdl_properties->window_title : "",
+    // Step 1: create window
+    window = SDL_CreateWindow(properties->window.title != NULL ? properties->window.title : "",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-            sdl_properties->window_width != 0 ? sdl_properties->window_width : sdl_properties->texture_width,
-            sdl_properties->window_height != 0 ? sdl_properties->window_height : sdl_properties->texture_height,
-            window_flags);
+            properties->window.width != 0 ? properties->window.width : properties->texture.width,
+            properties->window.height != 0 ? properties->window.height : properties->texture.height,
+            properties->window.flags);
+
     if (window == NULL)
     {
-        result = STATION_FSM_EXEC_SDL_CREATE_WINDOW_FAIL;
+        code = 1;
         goto cleanup;
     }
 
+    // Step 2: create renderer
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
     if (renderer == NULL)
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+
     if (renderer == NULL)
     {
-        result = STATION_FSM_EXEC_SDL_CREATE_RENDERER_FAIL;
+        code = 2;
         goto cleanup;
     }
 
+    // Step 3: create texture
     texture = SDL_CreateTexture(renderer,
             SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
-            sdl_properties->texture_width, sdl_properties->texture_height);
+            properties->texture.width, properties->texture.height);
+
     if (texture == NULL)
     {
-        result = STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL;
+        code = 3;
         goto cleanup;
     }
 
-    // Initialize SDL context
-    sdl_context->window = window;
-    sdl_context->renderer = renderer;
-    sdl_context->texture = texture;
+    // Set SDL context fields
+    context->window.handle = window;
 
-    sdl_context->texture_lock_rectangle = NULL;
-    sdl_context->texture_lock_pixels = NULL;
-    sdl_context->texture_lock_pitch = 0;
+    context->renderer.handle = renderer;
 
-    sdl_context->texture_width = sdl_properties->texture_width;
-    sdl_context->texture_height = sdl_properties->texture_height;
+    context->texture.handle = texture;
+    context->texture.width = properties->texture.width;
+    context->texture.height = properties->texture.height;
 
-    // Execute finite state machine
-    result = station_finite_state_machine(state, fsm_data, num_threads);
+    context->texture.lock.rectangle = NULL;
+    context->texture.lock.pixels = NULL;
+    context->texture.lock.pitch = 0;
 
-    // Clear SDL context
-    sdl_context->window = NULL;
-    sdl_context->renderer = NULL;
-    sdl_context->texture = NULL;
-
-    sdl_context->texture_lock_rectangle = NULL;
-    sdl_context->texture_lock_pixels = NULL;
-    sdl_context->texture_lock_pitch = 0;
-
-    sdl_context->texture_width = 0;
-    sdl_context->texture_height = 0;
+    return 0;
 
 cleanup:
-    // Release resources and finalize SDL
-    if (texture)
+    if (texture != NULL)
         SDL_DestroyTexture(texture);
-    if (renderer)
+    if (renderer != NULL)
         SDL_DestroyRenderer(renderer);
-    if (window)
+    if (window != NULL)
         SDL_DestroyWindow(window);
 
-    SDL_Quit();
+    return code;
+#endif
+}
 
-    return result;
+void
+station_sdl_destroy_window_context(
+        station_sdl_window_context_t *context)
+{
+#ifndef STATION_IS_SDL_SUPPORTED
+    (void) context;
+#else
+    if (context == NULL)
+        return;
+
+    if (context->texture.handle != NULL)
+        SDL_DestroyTexture(context->texture.handle);
+
+    if (context->renderer.handle != NULL)
+        SDL_DestroyRenderer(context->renderer.handle);
+
+    if (context->window.handle != NULL)
+        SDL_DestroyWindow(context->window.handle);
+
+    // Clear SDL context fields
+    context->window.handle = NULL;
+
+    context->renderer.handle = NULL;
+
+    context->texture.handle = NULL;
+    context->texture.width = 0;
+    context->texture.height = 0;
+
+    context->texture.lock.rectangle = NULL;
+    context->texture.lock.pixels = NULL;
+    context->texture.lock.pitch = 0;
+#endif
+}
+
+int
+station_sdl_window_lock_texture(
+        station_sdl_window_context_t *context,
+        const struct SDL_Rect *rectangle)
+{
+#ifndef STATION_IS_SDL_SUPPORTED
+    (void) context;
+    (void) rectangle;
+
+    return -2;
+#else
+    if ((context == NULL) || (context->texture.handle == NULL))
+        return -1;
+
+    if (context->texture.lock.pixels != NULL)
+        return 2;
+
+    void *pixels;
+    int pitch;
+
+    if (SDL_LockTexture(context->texture.handle, rectangle, &pixels, &pitch) < 0)
+        return 1;
+
+    context->texture.lock.rectangle = rectangle;
+    context->texture.lock.pixels = pixels;
+    context->texture.lock.pitch = pitch / sizeof(*context->texture.lock.pixels);
+
+    return 0;
+#endif
+}
+
+int
+station_sdl_window_unlock_texture_and_render(
+        station_sdl_window_context_t *context)
+{
+#ifndef STATION_IS_SDL_SUPPORTED
+    (void) context;
+
+    return -2;
+#else
+    if ((context == NULL) || (context->renderer.handle == NULL) || (context->texture.handle == NULL))
+        return -1;
+
+    if (context->texture.lock.pixels == NULL)
+        return 2;
+
+    SDL_UnlockTexture(context->texture.handle);
+
+    context->texture.lock.rectangle = NULL;
+    context->texture.lock.pixels = NULL;
+    context->texture.lock.pitch = 0;
+
+    if (SDL_RenderCopy(context->renderer.handle, context->texture.handle,
+                (const SDL_Rect*)NULL, (const SDL_Rect*)NULL) < 0)
+        return 1;
+
+    SDL_RenderPresent(context->renderer.handle);
+
+    return 0;
 #endif
 }
 

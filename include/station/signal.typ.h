@@ -26,12 +26,15 @@
 #ifndef _STATION_SIGNAL_TYP_H_
 #define _STATION_SIGNAL_TYP_H_
 
-#include <stdatomic.h>
+#ifndef __STDC_NO_ATOMICS__
+#  include <stdatomic.h>
+#endif
 
 /**
  * @brief Set of supported signals.
  */
 typedef struct station_signal_set {
+#ifndef __STDC_NO_ATOMICS__
     atomic_bool signal_SIGHUP;
     atomic_bool signal_SIGINT;
     atomic_bool signal_SIGQUIT;
@@ -43,6 +46,9 @@ typedef struct station_signal_set {
     atomic_bool signal_SIGTTIN;
     atomic_bool signal_SIGTTOU;
     atomic_bool signal_SIGWINCH;
+#else
+    int dummy;
+#endif
 } station_signal_set_t;
 
 #endif // _STATION_SIGNAL_TYP_H_

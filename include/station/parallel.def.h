@@ -19,30 +19,18 @@
 
 /**
  * @file
- * @brief Types of finite state machine states.
+ * @brief Macros for parallel processing.
  */
 
 #pragma once
-#ifndef _STATION_STATE_TYP_H_
-#define _STATION_STATE_TYP_H_
-
-#include <station/func.typ.h>
+#ifndef _STATION_PARALLEL_DEF_H_
+#define _STATION_PARALLEL_DEF_H_
 
 /**
- * @brief Finite state machine state.
+ * @brief Declarator of a parallel processing function.
  */
-typedef struct station_state {
-    station_sfunc_t sfunc; ///< State function.
-    void *data; ///< State data.
-} station_state_t;
+#define STATION_PFUNC(name) \
+    void name(void *data, station_task_idx_t task_idx, station_thread_idx_t thread_idx)
 
-/**
- * @brief Chain (linked list) of finite state machine states.
- */
-typedef struct station_state_chain {
-    station_state_t next_state; ///< Next state.
-    void *current_data; ///< Current state data.
-} station_state_chain_t;
-
-#endif // _STATION_STATE_TYP_H_
+#endif // _STATION_PARALLEL_DEF_H_
 

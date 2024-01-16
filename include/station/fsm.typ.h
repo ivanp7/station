@@ -19,32 +19,45 @@
 
 /**
  * @file
- * @brief Finite state machine index types.
+ * @brief Types for finite state machines.
  */
 
 #pragma once
-#ifndef _STATION_INDEX_TYP_H_
-#define _STATION_INDEX_TYP_H_
+#ifndef _STATION_FSM_TYP_H_
+#define _STATION_FSM_TYP_H_
 
-#include <stdint.h>
-
-/**
- * @brief Index of a parallel task.
- */
-typedef uint32_t station_task_idx_t;
-/**
- * @brief Number of parallel tasks.
- */
-typedef station_task_idx_t station_tasks_number_t;
+struct station_state;
 
 /**
- * @brief Thread index.
+ * @brief State function of a finite state machine.
+ *
+ * State function is supposed to modify its 'state' argument, setting it to the next state.
+ * If the next state function is NULL, then FSM execution is terminated.
+ * The FSM execution loop is like the following:
+ *
+ * while (state.sfunc != NULL)
+ *     state.sfunc(&state, fsm_data);
  */
-typedef uint16_t station_thread_idx_t;
-/**
- * @brief Number of threads.
- */
-typedef station_thread_idx_t station_threads_number_t;
+typedef void (*station_sfunc_t)(
+        struct station_state *state, ///< [in,out] Current state (as input), next state (as output).
+        void *fsm_data ///< [in,out] Finite state machine data.
+);
 
-#endif // _STATION_INDEX_TYP_H_
+/**
+ * @brief Finite state machine state.
+ */
+typedef struct station_state {
+    station_sfunc_t sfunc; ///< State function.
+    void *data; ///< State data.
+} station_state_t;
+
+/**
+ * @brief Chain (linked list) of finite state machine states.
+ */
+typedef struct station_state_chain {
+    station_state_t next_state; ///< Next state.
+    void *current_data; ///< Current state data.
+} station_state_chain_t;
+
+#endif // _STATION_FSM_TYP_H_
 

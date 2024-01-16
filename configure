@@ -69,16 +69,16 @@ do
             FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED="true"
             ;;
 
+        S) # feature: enable signal management support
+            FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED="true"
+            ;;
+
         M) # feature: enable support for Simple DirectMedia Layer (SDL)
             FEATURE_IS_SDL_SUPPORTED="true"
             ;;
 
         O) # feature: enable support for OpenCL
             FEATURE_IS_OPENCL_SUPPORTED="true"
-            ;;
-
-        S) # feature: enable signal management support
-            FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED="true"
             ;;
 
         Y) # feature: enable thread yielding
@@ -118,9 +118,9 @@ else
 fi
 
 CFLAGS_COMMON="-pthread $CFLAGS_SDL $CFLAGS_OPENCL \
+${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:+"-DSTATION_IS_SIGNAL_MANAGEMENT_SUPPORTED"} \
 ${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
-${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"} \
-${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:+"-DSTATION_IS_SIGNAL_MANAGEMENT_SUPPORTED"}"
+${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"}"
 LFLAGS_COMMON="$LFLAGS_SDL $LFLAGS_OPENCL"
 
 case "${BUILD_TYPE:-}" in

@@ -1,6 +1,8 @@
-#include <station/plugin.h>
-#include <station/func.def.h>
-#include <station/signal.typ.h>
+#include <station/plugin.def.h>
+#include <station/fsm.def.h>
+#include <station/parallel.def.h>
+#include <station/parallel.typ.h>
+#include <station/sdl.typ.h>
 
 #include <stdbool.h>
 #include <threads.h>
@@ -20,13 +22,19 @@
 #define ALARM_DELAY 5
 
 
+struct station_signal_set;
+struct station_state;
+
 struct plugin_resources {
-    station_signal_set_t *signals;
+    struct station_signal_set *signals;
+
+    station_parallel_processing_context_t *parallel_processing_context;
 
 #ifdef STATION_IS_SDL_SUPPORTED
     SDL_Event event;
 #endif
-    station_sdl_context_t *sdl_context;
+    station_sdl_window_context_t sdl_window;
+    bool sdl_window_created;
 
     int counter;
     mtx_t counter_mutex;
@@ -40,12 +48,13 @@ struct plugin_resources {
 
 static STATION_PFUNC(pfunc_inc);
 static STATION_PFUNC(pfunc_dec);
-static STATION_PFUNC(pfunc_draw);
 
 static STATION_SFUNC(sfunc_pre);
 static STATION_SFUNC(sfunc_loop);
 static STATION_SFUNC(sfunc_post);
 
-
-STATION_PLUGIN_PREAMBLE()
+#ifdef STATION_IS_SDL_SUPPORTED
+static STATION_PFUNC(pfunc_draw);
+static STATION_SFUNC(sfunc_loop_sdl);
+#endif
 

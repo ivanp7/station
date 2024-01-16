@@ -19,24 +19,23 @@
 
 /**
  * @file
- * @brief Finite state machine function macros.
+ * @brief Application error codes.
  */
 
 #pragma once
-#ifndef _STATION_FUNC_DEF_H_
-#define _STATION_FUNC_DEF_H_
+#ifndef _STATION_APPLICATION_DEF_H_
+#define _STATION_APPLICATION_DEF_H_
 
-/**
- * @brief Declarator of a state function of a finite state machine.
- */
-#define STATION_SFUNC(name) \
-    void name(struct station_state *state, void *fsm_data, struct station_fsm_context *fsm_context)
+#define STATION_APP_ERROR_BASE 64
 
-/**
- * @brief Declarator of a parallel processing function of a finite state machine.
- */
-#define STATION_PFUNC(name) \
-    void name(void *data, station_task_idx_t task_idx, station_thread_idx_t thread_idx)
+#define STATION_APP_ERROR_ATEXIT        (STATION_APP_ERROR_BASE + 1)
+#define STATION_APP_ERROR_ARGUMENTS     (STATION_APP_ERROR_BASE + 2)
+#define STATION_APP_ERROR_PLUGIN        (STATION_APP_ERROR_BASE + 3)
+#define STATION_APP_ERROR_MALLOC        (STATION_APP_ERROR_BASE + 4)
+#define STATION_APP_ERROR_SIGNAL        (STATION_APP_ERROR_BASE + 5)
+#define STATION_APP_ERROR_THREADS       (STATION_APP_ERROR_BASE + 6)
+#define STATION_APP_ERROR_OPENCL        (STATION_APP_ERROR_BASE + 7)
+#define STATION_APP_ERROR_SDL           (STATION_APP_ERROR_BASE + 8)
 
-#endif // _STATION_FUNC_DEF_H_
+#endif // _STATION_APPLICATION_DEF_H_
 

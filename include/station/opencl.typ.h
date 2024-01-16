@@ -19,7 +19,7 @@
 
 /**
  * @file
- * @brief Types for finite state machines with OpenCL support.
+ * @brief Types for OpenCL support.
  */
 
 #pragma once
@@ -28,8 +28,6 @@
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
 #  include <CL/cl.h>
-#else
-#  include <stdint.h>
 #endif
 
 /**
@@ -45,7 +43,7 @@ typedef struct station_opencl_context {
     } *platforms;
     cl_uint num_platforms; ///< Number of OpenCL platforms with initialized contexts.
 #else
-    uint32_t num_platforms;
+    unsigned int num_platforms; // must be zero
 #endif
 } station_opencl_context_t;
 

@@ -19,7 +19,7 @@
 
 /**
  * @file
- * @brief Types for finite state machines with SDL support.
+ * @brief Types for SDL support.
  */
 
 #pragma once
@@ -27,6 +27,7 @@
 #define _STATION_SDL_TYP_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -34,38 +35,51 @@ struct SDL_Texture;
 struct SDL_Rect;
 
 /**
- * @brief SDL-related properties of a finite state machine.
+ * @brief Properties of a created SDL window.
+ *
+ * If window width is 0, it is substituted with texture width.
+ * If window height is 0, it is substituted with texture height.
  */
-typedef struct station_sdl_properties {
-    uint32_t sdl_init_flags; ///< Flags to pass to SDL_Init() call.
+typedef struct station_sdl_window_properties {
+    struct {
+        uint32_t width;  ///< Texture width in pixels.
+        uint32_t height; ///< Texture height in pixels.
+    } texture;
 
-    uint16_t texture_width;  ///< Texture width in pixels.
-    uint16_t texture_height; ///< Texture height in pixels.
+    struct {
+        uint32_t width;  ///< Window width in pixels.
+        uint32_t height; ///< Window height in pixels.
 
-    uint16_t window_width;  ///< Window width in pixels.
-    uint16_t window_height; ///< Window height in pixels.
+        uint32_t flags; ///< Window flags.
 
-    uint8_t window_resizable; ///< Window is resizable.
-    uint8_t window_shown;     ///< Window is shown upon creation.
-
-    const char *window_title; ///< Window title.
-} station_sdl_properties_t;
+        const char *title; ///< Window title.
+    } window;
+} station_sdl_window_properties_t;
 
 /**
- * @brief SDL context for a finite state machine.
+ * @brief SDL window context.
  */
-typedef struct station_sdl_context {
-    struct SDL_Window *window;     ///< SDL window handle.
-    struct SDL_Renderer *renderer; ///< SDL renderer handle.
-    struct SDL_Texture *texture;   ///< SDL texture handle.
+typedef struct station_sdl_window_context {
+    struct {
+        struct SDL_Window *handle; ///< SDL window handle.
+    } window;
 
-    const struct SDL_Rect *texture_lock_rectangle; ///< Locked texture pixels rectangle.
-    uint32_t *texture_lock_pixels; ///< Pointer to locked pixels of the texture.
-    uint32_t texture_lock_pitch;   ///< Length of a full texture row in pixels.
+    struct {
+        struct SDL_Renderer *handle; ///< SDL renderer handle.
+    } renderer;
 
-    uint32_t texture_width;  ///< SDL texture width in pixels.
-    uint32_t texture_height; ///< SDL texture height in pixels.
-} station_sdl_context_t;
+    struct {
+        struct SDL_Texture *handle; ///< SDL texture handle.
+        uint32_t width;  ///< SDL texture width in pixels.
+        uint32_t height; ///< SDL texture height in pixels.
+
+        struct {
+            const struct SDL_Rect *rectangle; ///< Locked texture pixels rectangle.
+            uint32_t *pixels; ///< Pointer to locked pixels of the texture.
+            uint32_t pitch;   ///< Size of a full texture row in pixels.
+        } lock;
+    } texture;
+} station_sdl_window_context_t;
 
 #endif // _STATION_SDL_TYP_H_
 

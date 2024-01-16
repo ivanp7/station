@@ -19,7 +19,7 @@
 
 /**
  * @file
- * @brief Constants and macros for finite state machine execution.
+ * @brief Macros for finite state machines.
  */
 
 #pragma once
@@ -27,48 +27,10 @@
 #define _STATION_FSM_DEF_H_
 
 /**
- * @brief Finite state machine execution result: success.
+ * @brief Declarator of a state function of a finite state machine.
  */
-#define STATION_FSM_EXEC_SUCCESS 0
-/**
- * @brief Finite state machine execution result: inputs are incorrect.
- */
-#define STATION_FSM_EXEC_INCORRECT_INPUTS 1
-/**
- * @brief Finite state machine execution result: malloc() failure.
- */
-#define STATION_FSM_EXEC_MALLOC_FAIL 2
-/**
- * @brief Finite state machine execution result: thrd_create() failure - thrd_nomem.
- */
-#define STATION_FSM_EXEC_THRD_NOMEM 3
-/**
- * @brief Finite state machine execution result: thrd_create() failure - thrd_error.
- */
-#define STATION_FSM_EXEC_THRD_ERROR 4
-
-/**
- * @brief Finite state machine execution result: SDL_Init() failure.
- */
-#define STATION_FSM_EXEC_SDL_INIT_FAIL 5
-/**
- * @brief Finite state machine execution result: SDL_CreateWindow() failure.
- */
-#define STATION_FSM_EXEC_SDL_CREATE_WINDOW_FAIL 6
-/**
- * @brief Finite state machine execution result: SDL_CreateRenderer() failure.
- */
-#define STATION_FSM_EXEC_SDL_CREATE_RENDERER_FAIL 7
-/**
- * @brief Finite state machine execution result: SDL_CreateTexture() failure.
- */
-#define STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL 8
-
-/**
- * @brief Check if finite state machine failure is caused by SDL.
- */
-#define STATION_FSM_EXEC_IS_SDL_FAILED(status) \
-    (((status) >= STATION_FSM_EXEC_SDL_INIT_FAIL) && ((status) <= STATION_FSM_EXEC_SDL_CREATE_TEXTURE_FAIL))
+#define STATION_SFUNC(name) \
+    void name(struct station_state *state, void *fsm_data)
 
 #endif // _STATION_FSM_DEF_H_
 
