@@ -578,7 +578,8 @@ static void initialize(int argc, char *argv[])
     application.plugin.handle = dlopen(application.args.inputs[0], RTLD_NOW | RTLD_LOCAL);
     if (application.plugin.handle == NULL)
     {
-        ERROR_("couldn't load plugin " COLOR_STRING "%s" COLOR_RESET, application.args.inputs[0]);
+        ERROR_("couldn't load plugin " COLOR_STRING "%s" COLOR_RESET
+                " (%s)", application.args.inputs[0], dlerror());
         exit(STATION_APP_ERROR_PLUGIN);
     }
     AT_EXIT(exit_unload_plugin);
