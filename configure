@@ -7,7 +7,7 @@ PROJECT_DIR="$(realpath -- "$(dirname -- "$0")")"
 ###############################################################################
 
 : ${PROJECT_NAME:="station"}
-: ${PROJECT_DESCRIPTION:="A finite state machine implementation."}
+: ${PROJECT_DESCRIPTION:="A resource provider library/application."}
 : ${PROJECT_VERSION:="1.0"}
 
 IDIR="include"
