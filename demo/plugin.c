@@ -368,3 +368,17 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final)
 
 STATION_PLUGIN("Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final)
 
+
+// Make shared library executable
+
+void plugin_main(void);
+
+__attribute__((force_align_arg_pointer))
+void plugin_main(void)
+{
+    printf("Demo plugin for station-app\n");
+    exit(0);
+}
+
+const char dl_loader[] __attribute__((section(".interp"))) = DL_LOADER;
+
