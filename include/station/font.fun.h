@@ -19,32 +19,49 @@
 
 /**
  * @file
- * @brief Types for data buffers.
+ * @brief Font-related functions.
  */
 
 #pragma once
-#ifndef _STATION_BUFFER_TYP_H_
-#define _STATION_BUFFER_TYP_H_
+#ifndef _STATION_FONT_FUN_H_
+#define _STATION_FONT_FUN_H_
 
 #include <stddef.h>
-#include <stdbool.h>
+
+struct station_font_psf2;
+struct station_buffer;
 
 /**
- * @brief Buffer of bytes.
+ * @brief Load PC Screen Font version 2 from buffer.
+ *
+ * @return Font.
  */
-typedef struct station_buffer {
-    size_t num_bytes; ///< Size of data in bytes.
-    bool own_memory;  ///< Whether memory is owned by buffer.
-    void *bytes;      ///< Data (object representation).
-} station_buffer_t;
+struct station_font_psf2*
+station_load_font_psf2_from_buffer(
+        const struct station_buffer *buffer ///< [in] Buffer with font data.
+);
 
 /**
- * @brief Array of buffers.
+ * @brief Unload PC Screen Font version 2.
  */
-typedef struct station_buffers_array {
-    size_t num_buffers;
-    station_buffer_t **buffers;
-} station_buffers_array_t;
+void
+station_unload_font_psf2(
+        struct station_font_psf2 *font ///< [in] Font to unload.
+);
 
-#endif // _STATION_BUFFER_TYP_H_
+/**
+ * @brief Get glyph (PC Screen Font version 2) of a character.
+ *
+ * @return Character glyph.
+ */
+const unsigned char*
+station_font_psf2_glyph(
+        const char *utf8_str, ///< [in] UTF-8 string.
+        size_t utf8_str_len,  ///< [in] Length of UTF-8 string in bytes.
+
+        size_t *chr_len, ///< [out] Length of the first character in UTF-8 string in bytes.
+        const struct station_font_psf2 *font ///< [in] Font.
+);
+
+#endif // _STATION_FONT_FUN_H_
 

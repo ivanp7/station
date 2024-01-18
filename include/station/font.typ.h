@@ -19,32 +19,38 @@
 
 /**
  * @file
- * @brief Types for data buffers.
+ * @brief Types for fonts.
  */
 
 #pragma once
-#ifndef _STATION_BUFFER_TYP_H_
-#define _STATION_BUFFER_TYP_H_
+#ifndef _STATION_FONT_TYP_H_
+#define _STATION_FONT_TYP_H_
 
-#include <stddef.h>
-#include <stdbool.h>
-
-/**
- * @brief Buffer of bytes.
- */
-typedef struct station_buffer {
-    size_t num_bytes; ///< Size of data in bytes.
-    bool own_memory;  ///< Whether memory is owned by buffer.
-    void *bytes;      ///< Data (object representation).
-} station_buffer_t;
+#include <stdint.h>
 
 /**
- * @brief Array of buffers.
+ * @brief Header of PC Screen Font version 2.
  */
-typedef struct station_buffers_array {
-    size_t num_buffers;
-    station_buffer_t **buffers;
-} station_buffers_array_t;
+typedef struct station_font_psf2_header {
+    uint32_t magic;           ///< Magic bytes to identify PSF.
+    uint32_t version;         ///< Zero.
+    uint32_t header_size;     ///< Offset of bitmaps in file, 32.
+    uint32_t flags;           ///< 1 if there's unicode table, 0 otherwise.
+    uint32_t num_glyphs;      ///< Number of glyphs.
+    uint32_t bytes_per_glyph; ///< Size of each glyph.
+    uint32_t height;          ///< Height in pixels.
+    uint32_t width;           ///< Width in pixels.
+} station_font_psf2_header_t;
 
-#endif // _STATION_BUFFER_TYP_H_
+/**
+ * @brief PC Screen Font version 2, representation in memory.
+ */
+typedef struct station_font_psf2 {
+    station_font_psf2_header_t *header; ///< Font header.
+    unsigned char *glyphs;              ///< Font glyphs.
+
+    uint32_t *mapping_table; ///< (Unicode code point) -> (glyph index) mapping table.
+} station_font_psf2_t;
+
+#endif // _STATION_FONT_TYP_H_
 

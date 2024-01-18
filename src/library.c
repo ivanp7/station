@@ -34,6 +34,10 @@
 #include <station/sdl.fun.h>
 #include <station/sdl.typ.h>
 
+#include <station/font.fun.h>
+#include <station/font.typ.h>
+#include <station/font.def.h>
+
 #if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
 #  error "threads and/or atomics are not available"
 #endif
@@ -590,9 +594,12 @@ station_sdl_initialize_window_context(
     context->texture.width = properties->texture.width;
     context->texture.height = properties->texture.height;
 
-    context->texture.lock.rectangle = NULL;
     context->texture.lock.pixels = NULL;
     context->texture.lock.pitch = 0;
+    context->texture.lock.rectangle.x = 0;
+    context->texture.lock.rectangle.y = 0;
+    context->texture.lock.rectangle.width = 0;
+    context->texture.lock.rectangle.height = 0;
 
     return 0;
 
@@ -636,38 +643,71 @@ station_sdl_destroy_window_context(
     context->texture.width = 0;
     context->texture.height = 0;
 
-    context->texture.lock.rectangle = NULL;
     context->texture.lock.pixels = NULL;
     context->texture.lock.pitch = 0;
+    context->texture.lock.rectangle.x = 0;
+    context->texture.lock.rectangle.y = 0;
+    context->texture.lock.rectangle.width = 0;
+    context->texture.lock.rectangle.height = 0;
 #endif
 }
 
 int
 station_sdl_window_lock_texture(
         station_sdl_window_context_t *context,
-        const struct SDL_Rect *rectangle)
+
+        bool whole_texture,
+
+        uint32_t x,
+        uint32_t y,
+        uint32_t width,
+        uint32_t height)
 {
 #ifndef STATION_IS_SDL_SUPPORTED
     (void) context;
-    (void) rectangle;
+    (void) whole_texture;
+    (void) x;
+    (void) y;
+    (void) width;
+    (void) height;
 
     return -2;
 #else
     if ((context == NULL) || (context->texture.handle == NULL))
         return -1;
 
+    if (!whole_texture && ((width == 0) || (height == 0)))
+        return -1;
+
     if (context->texture.lock.pixels != NULL)
         return 2;
+
+    struct SDL_Rect rectangle = {.x = x, .y = y, .w = width, .h = height};
 
     void *pixels;
     int pitch;
 
-    if (SDL_LockTexture(context->texture.handle, rectangle, &pixels, &pitch) < 0)
+    if (SDL_LockTexture(context->texture.handle,
+                whole_texture ? NULL : &rectangle, &pixels, &pitch) < 0)
         return 1;
 
-    context->texture.lock.rectangle = rectangle;
     context->texture.lock.pixels = pixels;
     context->texture.lock.pitch = pitch / sizeof(*context->texture.lock.pixels);
+
+    if (whole_texture)
+    {
+        context->texture.lock.rectangle.x = 0;
+        context->texture.lock.rectangle.y = 0;
+        context->texture.lock.rectangle.width = context->texture.width;
+        context->texture.lock.rectangle.height = context->texture.height;
+    }
+    else
+    {
+        context->texture.lock.rectangle.x = x;
+        context->texture.lock.rectangle.y = y;
+        context->texture.lock.rectangle.width = width;
+        context->texture.lock.rectangle.height = height;
+    }
 
     return 0;
 #endif
@@ -690,9 +730,12 @@ station_sdl_window_unlock_texture_and_render(
 
     SDL_UnlockTexture(context->texture.handle);
 
-    context->texture.lock.rectangle = NULL;
     context->texture.lock.pixels = NULL;
     context->texture.lock.pitch = 0;
+    context->texture.lock.rectangle.x = 0;
+    context->texture.lock.rectangle.y = 0;
+    context->texture.lock.rectangle.width = 0;
+    context->texture.lock.rectangle.height = 0;
 
     if (SDL_RenderCopy(context->renderer.handle, context->texture.handle,
                 (const SDL_Rect*)NULL, (const SDL_Rect*)NULL) < 0)
@@ -702,5 +745,321 @@ station_sdl_window_unlock_texture_and_render(
 
     return 0;
 #endif
+}
+
+bool
+station_sdl_window_texture_draw_glyph(
+        station_sdl_window_context_t *context,
+
+        int32_t x,
+        int32_t y,
+
+        bool draw_fg,
+        bool draw_bg,
+
+        uint32_t fg,
+        uint32_t bg,
+
+        const unsigned char *glyph,
+        uint32_t glyph_width,
+        uint32_t glyph_height,
+
+        int32_t glyph_col_idx,
+        int32_t glyph_row_idx,
+        int32_t glyph_num_cols,
+        int32_t glyph_num_rows)
+{
+#ifndef STATION_IS_SDL_SUPPORTED
+    (void) context;
+    (void) x;
+    (void) y;
+    (void) draw_fg;
+    (void) draw_bg;
+    (void) fg;
+    (void) bg;
+    (void) glyph;
+    (void) glyph_width;
+    (void) glyph_height;
+    (void) glyph_col_idx;
+    (void) glyph_row_idx;
+    (void) glyph_num_cols;
+    (void) glyph_num_rows;
+
+    return false;
+#else
+    if ((context == NULL) || (context->texture.lock.pixels == NULL))
+        return false;
+    else if (!draw_fg && !draw_bg)
+        return false;
+    else if ((glyph == NULL) || (glyph_width == 0) || (glyph_height == 0))
+        return false;
+    else if ((glyph_num_cols == 0) || (glyph_num_rows == 0))
+        return false;
+
+    uint32_t *pixels = context->texture.lock.pixels;
+    uint32_t pitch = context->texture.lock.pitch;
+    uint32_t rect_x = context->texture.lock.rectangle.x;
+    uint32_t rect_y = context->texture.lock.rectangle.y;
+    uint32_t rect_width = context->texture.lock.rectangle.width;
+    uint32_t rect_height = context->texture.lock.rectangle.height;
+
+    uint32_t bytes_per_row = (glyph_width + 7) / 8;
+
+    int32_t col_idx_delta = glyph_num_cols > 0 ? 1 : -1;
+    int32_t row_idx_delta = glyph_num_rows > 0 ? 1 : -1;
+
+    for (int32_t row_idx = glyph_row_idx, i = 0; row_idx != glyph_row_idx + glyph_num_rows;
+            row_idx += row_idx_delta, i++)
+    {
+        if ((y + i < 0) || ((uint32_t)(y + i) < rect_y) || ((uint32_t)(y + i) >= rect_y + rect_height))
+            continue;
+
+        uint32_t texture_row_displ = pitch * (y + i - rect_y);
+
+        const unsigned char *row;
+        if ((row_idx >= 0) && ((uint32_t)row_idx < glyph_height))
+            row = glyph + bytes_per_row * row_idx;
+        else
+            row = NULL;
+
+        uint32_t byte_idx = bytes_per_row;
+        unsigned char byte;
+
+        for (int32_t col_idx = glyph_col_idx, j = 0; col_idx != glyph_col_idx + glyph_num_cols;
+                col_idx += col_idx_delta, j++)
+        {
+            if ((x + j < 0) || ((uint32_t)(x + j) < rect_x) || ((uint32_t)(x + j) >= rect_x + rect_width))
+                continue;
+
+            uint32_t texture_idx = texture_row_displ + (x + j - rect_x);
+
+            bool pixel_is_fg = false;
+            if ((row != NULL) && (col_idx >= 0) && ((uint32_t)col_idx < glyph_width))
+            {
+                uint32_t current_byte_idx = col_idx / 8;
+                if (current_byte_idx != byte_idx)
+                {
+                    byte_idx = current_byte_idx;
+                    byte = row[byte_idx];
+                }
+
+                pixel_is_fg = byte & (1 << (7 - (col_idx % 8)));
+            }
+
+            if (draw_fg && pixel_is_fg)
+                pixels[texture_idx] = fg;
+            else if (draw_bg && !pixel_is_fg)
+                pixels[texture_idx] = bg;
+        }
+    }
+
+    return true;
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// font.fun.h
+///////////////////////////////////////////////////////////////////////////////
+
+#define NUM_UNICODE_CODE_POINTS 0x110000 // 0 - 0x10FFFF
+
+static
+size_t
+station_decode_utf8_code_point(
+        const unsigned char *seq,
+        size_t remaining_bytes,
+        uint32_t *code_point)
+{
+    *code_point = -1; // invalid code point signifies error
+
+    if (remaining_bytes == 0)
+        return 0;
+
+    unsigned char byte1 = seq[0];
+
+    if ((byte1 & 0xF8) == 0xF8) // invalid first byte
+    {
+        if (byte1 == 0xFF) // record separator byte
+            *code_point = NUM_UNICODE_CODE_POINTS;
+        return 1;
+    }
+
+    if (byte1 & 0x80) // Unicode
+    {
+        if (byte1 & 0x40) // valid first byte
+        {
+            if (remaining_bytes < 2)
+                return 1;
+
+            unsigned char byte2 = seq[1];
+            if ((byte2 & 0xC0) != 0x80)
+                return 1;
+
+            if (byte1 & 0x20) // 3-4 bytes
+            {
+                if (remaining_bytes < 3)
+                    return 2;
+
+                unsigned char byte3 = seq[2];
+                if ((byte3 & 0xC0) != 0x80)
+                    return 2;
+
+                if (byte1 & 0x10) // 4 bytes
+                {
+                    if (remaining_bytes < 4)
+                        return 3;
+
+                    unsigned char byte4 = seq[3];
+                    if ((byte4 & 0xC0) != 0x80)
+                        return 3;
+
+                    *code_point = byte1 & 0x07;
+                    *code_point = (*code_point << 6) | (byte2 & 0x3F);
+                    *code_point = (*code_point << 6) | (byte3 & 0x3F);
+                    *code_point = (*code_point << 6) | (byte4 & 0x3F);
+                    return 4;
+                }
+                else // 3 bytes
+                {
+                    *code_point = byte1 & 0x0F;
+                    *code_point = (*code_point << 6) | (byte2 & 0x3F);
+                    *code_point = (*code_point << 6) | (byte3 & 0x3F);
+                    return 3;
+                }
+            }
+            else // 2 bytes
+            {
+                *code_point = byte1 & 0x1F;
+                *code_point = (*code_point << 6) | (byte2 & 0x3F);
+                return 2;
+            }
+        }
+        else // invalid first byte
+        {
+            // Skip until valid first byte
+            size_t skip = 1;
+            while ((skip < remaining_bytes) && ((seq[skip] & 0xC0) == 0x80))
+                skip++;
+
+            return skip;
+        }
+    }
+    else // ASCII
+    {
+        *code_point = byte1;
+        return 1;
+    }
+}
+
+station_font_psf2_t*
+station_load_font_psf2_from_buffer(
+        const station_buffer_t *buffer)
+{
+    if ((buffer == NULL) || (buffer->bytes == NULL))
+        return NULL;
+
+    if (buffer->num_bytes < sizeof(station_font_psf2_header_t))
+        return NULL;
+
+    station_font_psf2_header_t *header = buffer->bytes;
+    if ((header->magic != STATION_FONT_PSF2_MAGIC) || (header->version != 0))
+        return NULL;
+
+    if (header->header_size < sizeof(station_font_psf2_header_t) ||
+            (header->bytes_per_glyph == 0) || (header->num_glyphs == 0))
+        return NULL;
+
+    if (buffer->num_bytes < header->header_size +
+            (size_t)header->bytes_per_glyph * header->num_glyphs)
+        return NULL;
+
+    station_font_psf2_t *font = malloc(sizeof(*font));
+    if (font == NULL)
+        return NULL;
+
+    font->header = header;
+    font->glyphs = (unsigned char*)buffer->bytes + header->header_size;
+
+    if (!header->flags)
+        font->mapping_table = NULL;
+    else
+    {
+        unsigned char *table_end = (unsigned char*)buffer->bytes + buffer->num_bytes;
+        unsigned char *table = font->glyphs +
+            (size_t)header->bytes_per_glyph * header->num_glyphs;
+
+        size_t remaining_bytes = table_end - table;
+
+        font->mapping_table = malloc(sizeof(*font->mapping_table) * NUM_UNICODE_CODE_POINTS);
+        if (font->mapping_table == NULL)
+        {
+            free(font);
+            return NULL;
+        }
+
+        for (uint32_t i = 0; i < NUM_UNICODE_CODE_POINTS; i++)
+            font->mapping_table[i] = 0; // map all code points to glyph #0 by default
+
+        // Decode mapping table
+        uint32_t glyph_idx = 0;
+        while (remaining_bytes > 0)
+        {
+            uint32_t code_point;
+            size_t seq_len = station_decode_utf8_code_point(table, remaining_bytes, &code_point);
+
+            if (code_point < NUM_UNICODE_CODE_POINTS) // valid code point
+                font->mapping_table[code_point] = glyph_idx;
+            else if (code_point == NUM_UNICODE_CODE_POINTS) // record end
+                glyph_idx++;
+
+            table += seq_len;
+            remaining_bytes -= seq_len;
+        }
+    }
+
+    return font;
+}
+
+void
+station_unload_font_psf2(
+        station_font_psf2_t *font)
+{
+    if (font != NULL)
+    {
+        free(font->mapping_table);
+        free(font);
+    }
+}
+
+const unsigned char*
+station_font_psf2_glyph(
+        const char *utf8_str,
+        size_t utf8_str_len,
+
+        size_t *chr_len,
+        const station_font_psf2_t *font)
+{
+    if ((utf8_str == NULL) || (font == NULL))
+        return NULL;
+
+    uint32_t code_point;
+    size_t seq_len = station_decode_utf8_code_point(
+            (const unsigned char*)utf8_str, utf8_str_len, &code_point);
+
+    if (chr_len != NULL)
+        *chr_len = seq_len;
+
+    if (code_point < NUM_UNICODE_CODE_POINTS) // valid code point
+    {
+        uint32_t glyph_idx = (font->mapping_table == NULL) ?
+            code_point : font->mapping_table[code_point];
+
+        if (glyph_idx >= font->header->num_glyphs)
+            return NULL;
+
+        return font->glyphs + (size_t)font->header->bytes_per_glyph * glyph_idx;
+    }
+    else
+        return NULL;
 }
 

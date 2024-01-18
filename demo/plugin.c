@@ -2,8 +2,11 @@
 
 #include <station/plugin.typ.h>
 #include <station/signal.typ.h>
+#include <station/buffer.typ.h>
+
 #include <station/parallel.fun.h>
 #include <station/sdl.fun.h>
+#include <station/font.fun.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,7 +46,7 @@ static STATION_PFUNC(pfunc_draw)
     station_task_idx_t x = task_idx % TEXTURE_WIDTH;
 
     uint32_t pixel = ((x+y) + resources->frame) & 0xFF;
-    pixel = (pixel << 16) | (pixel << 8) | pixel;
+    pixel = 0xFF000000 | (pixel << 16) | (pixel << 8) | pixel;
 
     resources->sdl_window.texture.lock.pixels[task_idx] = pixel;
 }
@@ -154,7 +157,7 @@ static STATION_SFUNC(sfunc_loop_sdl)
         if (!resources->frozen)
         {
             if (station_sdl_window_lock_texture(&resources->sdl_window,
-                        (const struct SDL_Rect*)NULL) != 0)
+                        true, 0, 0, 0, 0) != 0)
             {
                 printf("station_sdl_window_lock_texture() failure\n");
                 state->sfunc = sfunc_post;
@@ -163,6 +166,53 @@ static STATION_SFUNC(sfunc_loop_sdl)
 
             station_parallel_processing_execute(resources->parallel_processing_context,
                     pfunc_draw, resources, TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE);
+
+            if ((resources->font != NULL) && (resources->text != NULL))
+            {
+                const char *str = resources->text;
+                int x, y;
+                {
+                    int len = 0;
+                    while (*str != '\0')
+                    {
+                        size_t chr_len;
+                        station_font_psf2_glyph(str, strlen(str), &chr_len, resources->font);
+                        str += chr_len;
+                        len++;
+                    }
+
+                    x = (TEXTURE_WIDTH - len * (int)resources->font->header->width) / 2;
+                    y = (TEXTURE_HEIGHT - (int)resources->font->header->height) / 2;
+                }
+
+                int i = 0;
+                str = resources->text;
+                while (*str != '\0')
+                {
+                    size_t chr_len;
+                    const unsigned char *glyph = station_font_psf2_glyph(str, strlen(str),
+                            &chr_len, resources->font);
+                    str += chr_len;
+
+                    if (glyph != NULL)
+                    {
+                        station_sdl_window_texture_draw_glyph(
+                                &resources->sdl_window,
+                                x, y + (int)resources->font->header->height *
+                                cos(1.0 * (resources->frame / 128.0f + i * M_PI/8)),
+                                true, false,
+                                0xFF0000FF, 0xFF888888,
+                                glyph, resources->font->header->width, resources->font->header->height,
+                                0, // resources->font->header->width-1,
+                                0, // resources->font->header->height-1,
+                                +(int)resources->font->header->width,
+                                +(int)resources->font->header->height);
+                    }
+
+                    x += resources->font->header->width;
+                    i++;
+                }
+            }
 
             if (station_sdl_window_unlock_texture_and_render(&resources->sdl_window) != 0)
             {
@@ -210,6 +260,9 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf)
     for (int i = 0; i < argc; i++)
         printf("  \"%s\",\n", argv[i]);
     printf(")\n");
+
+    if (argc >= 2)
+        args->cmdline = argv[1];
 
     args->signals->signal_SIGINT = true;
     args->signals->signal_SIGQUIT = true;
@@ -265,6 +318,20 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init)
     else
         resources->sdl_window_created = false;
 
+    if (inputs->files->num_buffers > 0)
+    {
+        resources->font = station_load_font_psf2_from_buffer(
+                inputs->files->buffers[0]);
+
+        if (resources->font == NULL)
+            printf("Couldn't load PSFv2 font from file #0\n");
+    }
+    else
+        resources->font = NULL;
+
+    if (inputs->cmdline != NULL)
+        resources->text = inputs->cmdline;
+
     resources->counter = 0;
     mtx_init(&resources->counter_mutex, mtx_plain);
 
@@ -285,6 +352,8 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final)
     if (resources != NULL)
     {
         mtx_destroy(&resources->counter_mutex);
+
+        station_unload_font_psf2(resources->font);
 
         if (resources->sdl_window_created)
             station_sdl_destroy_window_context(&resources->sdl_window);

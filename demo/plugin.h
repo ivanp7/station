@@ -3,6 +3,7 @@
 #include <station/parallel.def.h>
 #include <station/parallel.typ.h>
 #include <station/sdl.typ.h>
+#include <station/font.typ.h>
 
 #include <stdbool.h>
 #include <threads.h>
@@ -15,8 +16,8 @@
 #define NUM_TASKS 128
 #define BATCH_SIZE 16
 
-#define TEXTURE_WIDTH 256
-#define TEXTURE_HEIGHT 144
+#define TEXTURE_WIDTH (256 / 1)
+#define TEXTURE_HEIGHT (144 / 1)
 #define WINDOW_SCALE 4
 
 #define ALARM_DELAY 5
@@ -35,6 +36,9 @@ struct plugin_resources {
 #endif
     station_sdl_window_context_t sdl_window;
     bool sdl_window_created;
+
+    station_font_psf2_t *font;
+    const char *text;
 
     int counter;
     mtx_t counter_mutex;

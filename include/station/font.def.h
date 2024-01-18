@@ -19,32 +19,17 @@
 
 /**
  * @file
- * @brief Types for data buffers.
+ * @brief Constants for fonts.
  */
 
 #pragma once
-#ifndef _STATION_BUFFER_TYP_H_
-#define _STATION_BUFFER_TYP_H_
-
-#include <stddef.h>
-#include <stdbool.h>
+#ifndef _STATION_FONT_DEF_H_
+#define _STATION_FONT_DEF_H_
 
 /**
- * @brief Buffer of bytes.
+ * @brief Magic constant of PC Screen Font version 2.
  */
-typedef struct station_buffer {
-    size_t num_bytes; ///< Size of data in bytes.
-    bool own_memory;  ///< Whether memory is owned by buffer.
-    void *bytes;      ///< Data (object representation).
-} station_buffer_t;
+#define STATION_FONT_PSF2_MAGIC 0x864ab572
 
-/**
- * @brief Array of buffers.
- */
-typedef struct station_buffers_array {
-    size_t num_buffers;
-    station_buffer_t **buffers;
-} station_buffers_array_t;
-
-#endif // _STATION_BUFFER_TYP_H_
+#endif // _STATION_FONT_DEF_H_
 

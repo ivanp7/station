@@ -74,9 +74,15 @@ typedef struct station_sdl_window_context {
         uint32_t height; ///< SDL texture height in pixels.
 
         struct {
-            const struct SDL_Rect *rectangle; ///< Locked texture pixels rectangle.
             uint32_t *pixels; ///< Pointer to locked pixels of the texture.
             uint32_t pitch;   ///< Size of a full texture row in pixels.
+
+            struct {
+                uint32_t x; ///< X coordinate of locked rectangle.
+                uint32_t y; ///< Y coordinate of locked rectangle.
+                uint32_t width;  ///< Width of locked rectangle.
+                uint32_t height; ///< Height of locked rectangle.
+            } rectangle;
         } lock;
     } texture;
 } station_sdl_window_context_t;
