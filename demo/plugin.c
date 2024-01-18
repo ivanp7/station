@@ -325,6 +325,8 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init)
 
         if (resources->font == NULL)
             printf("Couldn't load PSFv2 font from file #0\n");
+        else
+            printf("Font size (WxH): %ux%u\n", resources->font->header->width, resources->font->header->height);
     }
     else
         resources->font = NULL;
