@@ -1,3 +1,5 @@
+#pragma once
+
 #include <station/plugin.def.h>
 #include <station/fsm.def.h>
 #include <station/parallel.def.h>
