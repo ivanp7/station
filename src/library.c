@@ -823,7 +823,7 @@ station_sdl_window_texture_draw_glyph(
             row = NULL;
 
         uint32_t byte_idx = bytes_per_row;
-        unsigned char byte;
+        unsigned char byte = 0;
 
         for (int32_t col_idx = glyph_col_idx, j = 0; col_idx != glyph_col_idx + glyph_num_cols;
                 col_idx += col_idx_delta, j++)
