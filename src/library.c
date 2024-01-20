@@ -44,6 +44,7 @@
 
 #include <threads.h>
 #include <stdatomic.h>
+#include <time.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -52,7 +53,6 @@
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 #  include <signal.h>
 #  include <pthread.h>
-#  include <time.h>
 #endif
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -122,6 +122,8 @@ station_destroy_buffer(
 // parallel.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
+#define CND_WAIT_TIMEOUT_NANO 1000000 // 1 ms
+
 struct station_parallel_processing_threads_state {
     struct {
         station_threads_number_t num_threads;
@@ -131,6 +133,13 @@ struct station_parallel_processing_threads_state {
         atomic_bool pong_flag;
         bool ping_sense;
         bool pong_sense;
+
+#ifndef STATION_IS_BUSY_WAITING
+        cnd_t ping_cnd;
+        cnd_t pong_cnd;
+        mtx_t ping_mtx;
+        mtx_t pong_mtx;
+#endif
     } persistent;
 
     bool terminate;
@@ -169,6 +178,10 @@ station_parallel_processing_thread(
         free(thread_arg);
     }
 
+#ifndef STATION_IS_BUSY_WAITING
+    struct timespec timeout = {.tv_sec = 0, .tv_nsec = CND_WAIT_TIMEOUT_NANO};
+#endif
+
     const station_threads_number_t thread_counter_last = threads_state->persistent.num_threads - 1;
 
     station_pfunc_t pfunc;
@@ -179,20 +192,44 @@ station_parallel_processing_thread(
 
     bool ping_sense = false, pong_sense = false;
 
-    while (true)
+    for (;;)
     {
         ping_sense = !ping_sense;
         pong_sense = !pong_sense;
 
-        // Wait until signal
-        do
+#ifndef STATION_IS_BUSY_WAITING
         {
-#ifdef STATION_IS_THREAD_YIELD_ENABLED
-            thrd_yield();
+#  ifndef NDEBUG
+            int res =
+#  endif
+                mtx_lock(&threads_state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
+#endif
+
+        // Wait until signal
+        while (atomic_load_explicit(&threads_state->persistent.ping_flag,
+                    memory_order_acquire) != ping_sense)
+        {
+#ifndef STATION_IS_BUSY_WAITING
+#  ifndef NDEBUG
+            int res =
+#  endif
+                cnd_timedwait(&threads_state->persistent.ping_cnd,
+                        &threads_state->persistent.ping_mtx, &timeout);
+            assert((res == thrd_success) || (res == thrd_timedout));
 #endif
         }
-        while (atomic_load_explicit(&threads_state->persistent.ping_flag,
-                    memory_order_relaxed) != ping_sense);
+
+#ifndef STATION_IS_BUSY_WAITING
+        {
+#  ifndef NDEBUG
+            int res =
+#  endif
+                mtx_unlock(&threads_state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
+#endif
 
         if (threads_state->terminate)
             break;
@@ -229,8 +266,13 @@ station_parallel_processing_thread(
         // Wake master thread
         if (atomic_fetch_add_explicit(&threads_state->current.thread_counter, 1,
                     memory_order_relaxed) == thread_counter_last)
+        {
             atomic_store_explicit(&threads_state->persistent.pong_flag,
-                    pong_sense, memory_order_relaxed);
+                    pong_sense, memory_order_release);
+#ifndef STATION_IS_BUSY_WAITING
+            cnd_broadcast(&threads_state->persistent.pong_cnd);
+#endif
+        }
     }
 
     return 0;
@@ -253,10 +295,57 @@ station_parallel_processing_initialize_context(
 
     threads_state->persistent.num_threads = num_threads;
     threads_state->persistent.threads = NULL;
+
     atomic_init(&threads_state->persistent.ping_flag, false);
     atomic_init(&threads_state->persistent.pong_flag, false);
     threads_state->persistent.ping_sense = false;
     threads_state->persistent.pong_sense = false;
+
+#ifndef STATION_IS_BUSY_WAITING
+    {
+        int res;
+
+        res = cnd_init(&threads_state->persistent.ping_cnd);
+        if (res != thrd_success)
+        {
+            if (res == thrd_nomem)
+                return 2;
+            else
+                return 3;
+        }
+
+        res = cnd_init(&threads_state->persistent.pong_cnd);
+        if (res != thrd_success)
+        {
+            cnd_destroy(&threads_state->persistent.ping_cnd);
+
+            if (res == thrd_nomem)
+                return 2;
+            else
+                return 3;
+        }
+
+        res = mtx_init(&threads_state->persistent.ping_mtx, mtx_plain);
+        if (res != thrd_success)
+        {
+            cnd_destroy(&threads_state->persistent.ping_cnd);
+            cnd_destroy(&threads_state->persistent.pong_cnd);
+
+            return 3;
+        }
+
+        res = mtx_init(&threads_state->persistent.pong_mtx, mtx_plain);
+        if (res != thrd_success)
+        {
+            cnd_destroy(&threads_state->persistent.ping_cnd);
+            cnd_destroy(&threads_state->persistent.pong_cnd);
+            mtx_destroy(&threads_state->persistent.ping_mtx);
+
+            return 3;
+        }
+    }
+#endif
+
     threads_state->terminate = false;
 
     atomic_init(&threads_state->current.done_tasks, 0);
@@ -311,13 +400,25 @@ station_parallel_processing_initialize_context(
 cleanup:
     // Wake threads
     threads_state->terminate = true;
+
     atomic_store_explicit(&threads_state->persistent.ping_flag,
-            !threads_state->persistent.ping_sense, memory_order_relaxed);
+            !threads_state->persistent.ping_sense, memory_order_release);
+#ifndef STATION_IS_BUSY_WAITING
+    cnd_broadcast(&threads_state->persistent.ping_cnd);
+#endif
 
     for (station_threads_number_t i = 0; i < thread_idx; i++)
         thrd_join(threads_state->persistent.threads[i], (int*)NULL);
 
     free(threads_state->persistent.threads);
+
+#ifndef STATION_IS_BUSY_WAITING
+    cnd_destroy(&threads_state->persistent.ping_cnd);
+    cnd_destroy(&threads_state->persistent.pong_cnd);
+    mtx_destroy(&threads_state->persistent.ping_mtx);
+    mtx_destroy(&threads_state->persistent.pong_mtx);
+#endif
+
     free(threads_state);
 
     return code;
@@ -331,13 +432,25 @@ station_parallel_processing_destroy_context(
         return;
 
     context->state->terminate = true;
+
     atomic_store_explicit(&context->state->persistent.ping_flag,
-            !context->state->persistent.ping_sense, memory_order_relaxed);
+            !context->state->persistent.ping_sense, memory_order_release);
+#ifndef STATION_IS_BUSY_WAITING
+    cnd_broadcast(&context->state->persistent.ping_cnd);
+#endif
 
     for (station_threads_number_t i = 0; i < context->state->persistent.num_threads; i++)
         thrd_join(context->state->persistent.threads[i], (int*)NULL);
 
     free(context->state->persistent.threads);
+
+#ifndef STATION_IS_BUSY_WAITING
+    cnd_destroy(&context->state->persistent.ping_cnd);
+    cnd_destroy(&context->state->persistent.pong_cnd);
+    mtx_destroy(&context->state->persistent.ping_mtx);
+    mtx_destroy(&context->state->persistent.pong_mtx);
+#endif
+
     free(context->state);
 
     context->state = NULL;
@@ -360,6 +473,10 @@ station_parallel_processing_execute(
 
     if (context->state->persistent.num_threads > 0)
     {
+#ifndef STATION_IS_BUSY_WAITING
+        struct timespec timeout = {.tv_sec = 0, .tv_nsec = CND_WAIT_TIMEOUT_NANO};
+#endif
+
         if (batch_size == 0)
             batch_size = (num_tasks - 1) / context->state->persistent.num_threads + 1;
 
@@ -377,17 +494,45 @@ station_parallel_processing_execute(
             !context->state->persistent.pong_sense;
 
         // Wake slave threads
-        atomic_store_explicit(&context->state->persistent.ping_flag, ping_sense, memory_order_relaxed);
+        atomic_store_explicit(&context->state->persistent.ping_flag, ping_sense, memory_order_release);
+#ifndef STATION_IS_BUSY_WAITING
+        cnd_broadcast(&context->state->persistent.ping_cnd);
+#endif
+
+#ifndef STATION_IS_BUSY_WAITING
+        {
+#  ifndef NDEBUG
+            int res =
+#  endif
+                mtx_lock(&context->state->persistent.pong_mtx);
+            assert(res == thrd_success);
+        }
+#endif
 
         // Wait until all tasks are done
-        do
+        while (atomic_load_explicit(&context->state->persistent.pong_flag,
+                    memory_order_acquire) != pong_sense)
         {
-#ifdef STATION_IS_THREAD_YIELD_ENABLED
-            thrd_yield();
+#ifndef STATION_IS_BUSY_WAITING
+#  ifndef NDEBUG
+            int res =
+#  endif
+                cnd_timedwait(&context->state->persistent.pong_cnd,
+                        &context->state->persistent.pong_mtx, &timeout);
+            assert((res == thrd_success) || (res == thrd_timedout));
 #endif
         }
-        while (atomic_load_explicit(&context->state->persistent.pong_flag,
-                    memory_order_relaxed) != pong_sense);
+
+#ifndef STATION_IS_BUSY_WAITING
+        {
+#  ifndef NDEBUG
+            int res =
+#  endif
+                mtx_unlock(&context->state->persistent.pong_mtx);
+            assert(res == thrd_success);
+        }
+#endif
+
     }
     else
     {
@@ -401,6 +546,8 @@ station_parallel_processing_execute(
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+
+#define SIGTIMEDWAIT_TIMEOUT_NANO 1000000 // 1 ms
 
 struct station_signal_management_context
 {
@@ -419,7 +566,7 @@ station_signal_management_thread(
     struct station_signal_management_context *context = arg;
     assert(context != NULL);
 
-    struct timespec delay = {.tv_sec = 0, .tv_nsec = 1000000}; // 1 ms
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = SIGTIMEDWAIT_TIMEOUT_NANO};
 
     while (!atomic_load_explicit(&context->terminate, memory_order_acquire))
     {

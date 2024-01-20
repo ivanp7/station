@@ -81,8 +81,8 @@ do
             FEATURE_IS_OPENCL_SUPPORTED="true"
             ;;
 
-        Y) # feature: enable thread yielding
-            FEATURE_IS_THREAD_YIELD_ENABLED="true"
+        Y) # feature: enable busy-waiting instead of using condition variables
+            FEATURE_IS_BUSY_WAITING="true"
             ;;
 
         *) # display help
@@ -137,7 +137,7 @@ $CFLAGS_COMMON \
 $CFLAGS_BUILD_TYPE"
 
 CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
-${FEATURE_IS_THREAD_YIELD_ENABLED:+"-DSTATION_IS_THREAD_YIELD_ENABLED"}"
+${FEATURE_IS_BUSY_WAITING:+"-DSTATION_IS_BUSY_WAITING"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
 ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"}"
 
