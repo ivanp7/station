@@ -38,21 +38,24 @@
 #include <station/font.typ.h>
 #include <station/font.def.h>
 
-#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
-#  error "threads and/or atomics are not available"
-#endif
-
-#include <threads.h>
-#include <stdatomic.h>
-#include <time.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <assert.h>
 
+#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
+#  define STATION_NO_PARALLEL_PROCESSING
+#endif
+
+#ifndef STATION_NO_PARALLEL_PROCESSING
+#  include <threads.h>
+#  include <stdatomic.h>
+#endif
+
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 #  include <signal.h>
 #  include <pthread.h>
+#  include <time.h>
 #endif
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -121,6 +124,8 @@ station_destroy_buffer(
 ///////////////////////////////////////////////////////////////////////////////
 // parallel.fun.h
 ///////////////////////////////////////////////////////////////////////////////
+
+#ifndef STATION_NO_PARALLEL_PROCESSING
 
 struct station_parallel_processing_threads_state {
     struct {
@@ -287,11 +292,24 @@ station_parallel_processing_thread(
     return 0;
 }
 
+#endif // STATION_NO_PARALLEL_PROCESSING
+
 int
 station_parallel_processing_initialize_context(
         station_parallel_processing_context_t *context,
         station_threads_number_t num_threads)
 {
+#ifdef STATION_NO_PARALLEL_PROCESSING
+    (void) context;
+
+    if (num_threads > 0)
+        return -2;
+
+    context->state = NULL;
+    context->num_threads = 0;
+
+    return 0;
+#else
     if (context == NULL)
         return -1;
 
@@ -446,12 +464,18 @@ cleanup:
     free(threads_state);
 
     return code;
+#endif // STATION_NO_PARALLEL_PROCESSING
 }
 
 void
 station_parallel_processing_destroy_context(
         station_parallel_processing_context_t *context)
 {
+#ifdef STATION_NO_PARALLEL_PROCESSING
+    (void) context;
+
+    return;
+#else
     if ((context == NULL) || (context->state == NULL))
         return;
 
@@ -493,6 +517,7 @@ station_parallel_processing_destroy_context(
 
     context->state = NULL;
     context->num_threads = 0;
+#endif // STATION_NO_PARALLEL_PROCESSING
 }
 
 void
@@ -505,6 +530,16 @@ station_parallel_processing_execute(
         station_tasks_number_t num_tasks,
         station_tasks_number_t batch_size)
 {
+#ifdef STATION_NO_PARALLEL_PROCESSING
+    (void) context;
+    (void) batch_size;
+
+    if (pfunc == NULL)
+        return;
+
+    for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
+        pfunc(pfunc_data, task_idx, 0);
+#else
     if ((context == NULL) || (context->state == NULL) ||
             (pfunc == NULL) || (num_tasks == 0))
         return;
@@ -588,6 +623,7 @@ station_parallel_processing_execute(
         for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
             pfunc(pfunc_data, task_idx, 0);
     }
+#endif // STATION_NO_PARALLEL_PROCESSING
 }
 
 ///////////////////////////////////////////////////////////////////////////////
