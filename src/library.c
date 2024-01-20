@@ -134,7 +134,7 @@ struct station_parallel_processing_threads_state {
         bool ping_sense;
         bool pong_sense;
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         cnd_t ping_cnd;
         cnd_t pong_cnd;
         mtx_t ping_mtx;
@@ -178,7 +178,7 @@ station_parallel_processing_thread(
         free(thread_arg);
     }
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
     struct timespec timeout = {.tv_sec = 0, .tv_nsec = CND_WAIT_TIMEOUT_NANO};
 #endif
 
@@ -197,7 +197,7 @@ station_parallel_processing_thread(
         ping_sense = !ping_sense;
         pong_sense = !pong_sense;
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         {
 #  ifndef NDEBUG
             int res =
@@ -211,7 +211,7 @@ station_parallel_processing_thread(
         while (atomic_load_explicit(&threads_state->persistent.ping_flag,
                     memory_order_acquire) != ping_sense)
         {
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
 #  ifndef NDEBUG
             int res =
 #  endif
@@ -221,7 +221,7 @@ station_parallel_processing_thread(
 #endif
         }
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         {
 #  ifndef NDEBUG
             int res =
@@ -269,7 +269,7 @@ station_parallel_processing_thread(
         {
             atomic_store_explicit(&threads_state->persistent.pong_flag,
                     pong_sense, memory_order_release);
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
             cnd_broadcast(&threads_state->persistent.pong_cnd);
 #endif
         }
@@ -301,7 +301,7 @@ station_parallel_processing_initialize_context(
     threads_state->persistent.ping_sense = false;
     threads_state->persistent.pong_sense = false;
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
     {
         int res;
 
@@ -403,7 +403,7 @@ cleanup:
 
     atomic_store_explicit(&threads_state->persistent.ping_flag,
             !threads_state->persistent.ping_sense, memory_order_release);
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
     cnd_broadcast(&threads_state->persistent.ping_cnd);
 #endif
 
@@ -412,7 +412,7 @@ cleanup:
 
     free(threads_state->persistent.threads);
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
     cnd_destroy(&threads_state->persistent.ping_cnd);
     cnd_destroy(&threads_state->persistent.pong_cnd);
     mtx_destroy(&threads_state->persistent.ping_mtx);
@@ -435,7 +435,7 @@ station_parallel_processing_destroy_context(
 
     atomic_store_explicit(&context->state->persistent.ping_flag,
             !context->state->persistent.ping_sense, memory_order_release);
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
     cnd_broadcast(&context->state->persistent.ping_cnd);
 #endif
 
@@ -444,7 +444,7 @@ station_parallel_processing_destroy_context(
 
     free(context->state->persistent.threads);
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
     cnd_destroy(&context->state->persistent.ping_cnd);
     cnd_destroy(&context->state->persistent.pong_cnd);
     mtx_destroy(&context->state->persistent.ping_mtx);
@@ -473,7 +473,7 @@ station_parallel_processing_execute(
 
     if (context->state->persistent.num_threads > 0)
     {
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         struct timespec timeout = {.tv_sec = 0, .tv_nsec = CND_WAIT_TIMEOUT_NANO};
 #endif
 
@@ -495,11 +495,11 @@ station_parallel_processing_execute(
 
         // Wake slave threads
         atomic_store_explicit(&context->state->persistent.ping_flag, ping_sense, memory_order_release);
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         cnd_broadcast(&context->state->persistent.ping_cnd);
 #endif
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         {
 #  ifndef NDEBUG
             int res =
@@ -513,7 +513,7 @@ station_parallel_processing_execute(
         while (atomic_load_explicit(&context->state->persistent.pong_flag,
                     memory_order_acquire) != pong_sense)
         {
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
 #  ifndef NDEBUG
             int res =
 #  endif
@@ -523,7 +523,7 @@ station_parallel_processing_execute(
 #endif
         }
 
-#ifndef STATION_IS_BUSY_WAITING
+#ifdef STATION_IS_CONDITION_VARIABLES_USED
         {
 #  ifndef NDEBUG
             int res =
