@@ -122,8 +122,6 @@ station_destroy_buffer(
 // parallel.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
-#define CND_WAIT_TIMEOUT_NANO 1000000 // 1 ms
-
 struct station_parallel_processing_threads_state {
     struct {
         station_threads_number_t num_threads;
@@ -178,10 +176,6 @@ station_parallel_processing_thread(
         free(thread_arg);
     }
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-    struct timespec timeout = {.tv_sec = 0, .tv_nsec = CND_WAIT_TIMEOUT_NANO};
-#endif
-
     const station_threads_number_t thread_counter_last = threads_state->persistent.num_threads - 1;
 
     station_pfunc_t pfunc;
@@ -215,9 +209,9 @@ station_parallel_processing_thread(
 #  ifndef NDEBUG
             int res =
 #  endif
-                cnd_timedwait(&threads_state->persistent.ping_cnd,
-                        &threads_state->persistent.ping_mtx, &timeout);
-            assert((res == thrd_success) || (res == thrd_timedout));
+                cnd_wait(&threads_state->persistent.ping_cnd,
+                        &threads_state->persistent.ping_mtx);
+            assert(res == thrd_success);
 #endif
         }
 
@@ -269,8 +263,23 @@ station_parallel_processing_thread(
         {
             atomic_store_explicit(&threads_state->persistent.pong_flag,
                     pong_sense, memory_order_release);
+
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
+            {
+#  ifndef NDEBUG
+                int res =
+#  endif
+                    mtx_lock(&threads_state->persistent.pong_mtx);
+                assert(res == thrd_success);
+            }
             cnd_broadcast(&threads_state->persistent.pong_cnd);
+            {
+#  ifndef NDEBUG
+                int res =
+#  endif
+                    mtx_unlock(&threads_state->persistent.pong_mtx);
+                assert(res == thrd_success);
+            }
 #endif
         }
     }
@@ -403,8 +412,23 @@ cleanup:
 
     atomic_store_explicit(&threads_state->persistent.ping_flag,
             !threads_state->persistent.ping_sense, memory_order_release);
+
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
+    {
+#  ifndef NDEBUG
+        int res =
+#  endif
+            mtx_lock(&threads_state->persistent.ping_mtx);
+        assert(res == thrd_success);
+    }
     cnd_broadcast(&threads_state->persistent.ping_cnd);
+    {
+#  ifndef NDEBUG
+        int res =
+#  endif
+            mtx_unlock(&threads_state->persistent.ping_mtx);
+        assert(res == thrd_success);
+    }
 #endif
 
     for (station_threads_number_t i = 0; i < thread_idx; i++)
@@ -436,7 +460,21 @@ station_parallel_processing_destroy_context(
     atomic_store_explicit(&context->state->persistent.ping_flag,
             !context->state->persistent.ping_sense, memory_order_release);
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
+    {
+#  ifndef NDEBUG
+        int res =
+#  endif
+            mtx_lock(&context->state->persistent.ping_mtx);
+        assert(res == thrd_success);
+    }
     cnd_broadcast(&context->state->persistent.ping_cnd);
+    {
+#  ifndef NDEBUG
+        int res =
+#  endif
+            mtx_unlock(&context->state->persistent.ping_mtx);
+        assert(res == thrd_success);
+    }
 #endif
 
     for (station_threads_number_t i = 0; i < context->state->persistent.num_threads; i++)
@@ -473,10 +511,6 @@ station_parallel_processing_execute(
 
     if (context->state->persistent.num_threads > 0)
     {
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-        struct timespec timeout = {.tv_sec = 0, .tv_nsec = CND_WAIT_TIMEOUT_NANO};
-#endif
-
         if (batch_size == 0)
             batch_size = (num_tasks - 1) / context->state->persistent.num_threads + 1;
 
@@ -495,8 +529,23 @@ station_parallel_processing_execute(
 
         // Wake slave threads
         atomic_store_explicit(&context->state->persistent.ping_flag, ping_sense, memory_order_release);
+
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
+        {
+#  ifndef NDEBUG
+            int res =
+#  endif
+                mtx_lock(&context->state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
         cnd_broadcast(&context->state->persistent.ping_cnd);
+        {
+#  ifndef NDEBUG
+            int res =
+#  endif
+                mtx_unlock(&context->state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
 #endif
 
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
@@ -517,9 +566,9 @@ station_parallel_processing_execute(
 #  ifndef NDEBUG
             int res =
 #  endif
-                cnd_timedwait(&context->state->persistent.pong_cnd,
-                        &context->state->persistent.pong_mtx, &timeout);
-            assert((res == thrd_success) || (res == thrd_timedout));
+                cnd_wait(&context->state->persistent.pong_cnd,
+                        &context->state->persistent.pong_mtx);
+            assert(res == thrd_success);
 #endif
         }
 
