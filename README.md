@@ -37,6 +37,11 @@ The plugin prepares the initial finite state machine state, and creates its own 
 
 6. The finite state machine is executed.
 
+```c
+while (application.fsm.state.sfunc != NULL)
+    application.fsm.state.sfunc(&application.fsm.state, application.fsm.data);
+```
+
 7. Plugin finalization function is called.
 This function allows the plugin to destroy its own resources.
 
