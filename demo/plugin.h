@@ -38,6 +38,7 @@ struct plugin_resources {
 #endif
     station_sdl_window_context_t sdl_window;
     bool sdl_window_created;
+    bool window_frozen;
 
     station_font_psf2_t *font;
     const char *text;
@@ -45,7 +46,6 @@ struct plugin_resources {
     int counter;
     mtx_t counter_mutex;
 
-    bool frozen;
     bool alarm_set;
 
     unsigned prev_frame, frame;
