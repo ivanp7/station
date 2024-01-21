@@ -112,6 +112,14 @@ To see the possible build configuration options, run `configure` without argumen
 
 To generate `build.ninja`, run `configure <options>`.
 
+## Examples
+
+A quick and dirty demo plugin can be found in the `demo` subdirectory.
+
+List of projects using Station:
+
+* [still-alive](https://github.com/ivanp7/still-alive)
+
 ## License
 
 ```
