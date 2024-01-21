@@ -290,7 +290,7 @@ static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
 
 
 // Plugin help function
-static STATION_PLUGIN_HELP_FUNC(plugin_help)
+static STATION_PLUGIN_HELP_FUNC(plugin_help) // implicit arguments: argc, argv
 {
     printf("plugin_help(%i,\n", argc);
     for (int i = 0; i < argc; i++)
@@ -303,7 +303,7 @@ static STATION_PLUGIN_HELP_FUNC(plugin_help)
 }
 
 // Plugin configuration function
-static STATION_PLUGIN_CONF_FUNC(plugin_conf)
+static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, argv
 {
     printf("plugin_conf(%i,\n", argc);
     for (int i = 0; i < argc; i++)
@@ -327,7 +327,7 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf)
 }
 
 // Plugin initialization function
-static STATION_PLUGIN_INIT_FUNC(plugin_init)
+static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outputs
 {
     printf("plugin_init()\n");
 
@@ -340,7 +340,7 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init)
 
     outputs->plugin_resources = resources;
 
-    outputs->fsm_initial_state.sfunc = sfunc_pre; // begin execution from sfunc_pre()
+    outputs->fsm_initial_state.sfunc = sfunc_pre; // begin FSM execution from sfunc_pre()
     outputs->fsm_data = resources;
 
     resources->signals = inputs->signals;
@@ -381,7 +381,8 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init)
         if (resources->font == NULL)
             printf("Couldn't load PSFv2 font from file #0\n");
         else
-            printf("Font size (WxH): %ux%u\n", resources->font->header->width, resources->font->header->height);
+            printf("Font size (WxH): %ux%u\n", resources->font->header->width,
+                    resources->font->header->height);
     }
     else
         resources->font = NULL;
@@ -399,29 +400,26 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init)
 }
 
 // Plugin finalization function
-static STATION_PLUGIN_FINAL_FUNC(plugin_final)
+static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_resources, quick
 {
-    (void) quick;
-
     printf("plugin_final()\n");
 
     struct plugin_resources *resources = plugin_resources;
 
-    if (resources != NULL)
+    if (!quick)
     {
         mtx_destroy(&resources->counter_mutex);
 
         station_unload_font_psf2(resources->font);
+    }
 
-        if (resources->sdl_window_created)
-            station_sdl_destroy_window_context(&resources->sdl_window);
+    if (resources->sdl_window_created)
+        station_sdl_destroy_window_context(&resources->sdl_window);
 
+    if (!quick)
         free(resources);
 
-        return 0;
-    }
-    else
-        return 1;
+    return 0; // success
 }
 
 // Define the plugin
