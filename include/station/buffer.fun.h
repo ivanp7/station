@@ -35,7 +35,7 @@ struct station_buffer;
  */
 struct station_buffer*
 station_create_buffer_from_file(
-        const char *file
+        const char *file ///< [in] Path to file to read data from.
 );
 
 /**
@@ -43,7 +43,7 @@ station_create_buffer_from_file(
  */
 void
 station_destroy_buffer(
-        struct station_buffer *buffer
+        struct station_buffer *buffer ///< [in] Buffer to destroy.
 );
 
 #endif // _STATION_BUFFER_FUN_H_
