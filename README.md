@@ -112,6 +112,24 @@ To see the possible build configuration options, run `configure` without argumen
 
 To generate `build.ninja`, run `configure <options>`.
 
+## Build dependencies
+
+* gcc-compatible compiler (like clang)
+* pkg-config
+* gengetopt
+* ninja
+
+## Dependencies
+
+The code implies the availability of the POSIX interfaces.
+
+The following dependencies are optional.
+Each of them is required only if the corresponding feature
+is enabled at the build configuration step.
+
+* SDL2
+* OpenCL
+
 ## Examples
 
 A quick and dirty demo plugin can be found in the `demo` subdirectory.
