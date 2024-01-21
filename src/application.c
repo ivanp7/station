@@ -425,7 +425,7 @@ static void initialize(int argc, char *argv[])
                                                  ▐▌   ▐▌        \n\
                                                                 \n\
                                                      by Ivan Podmazov\n\
-                                                         (C) 2024\n\
+                                                      (C) 2020-2024\n\
 \n\n" COLOR_RESET);
 
     /////////////////////////////////////////////////////
