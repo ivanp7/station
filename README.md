@@ -138,6 +138,10 @@ List of projects using Station:
 
 * [still-alive](https://github.com/ivanp7/still-alive)
 
+## Documentation
+
+Doxygen documentation is available at `docs` subdirectory. To build it, run `make`.
+
 ## License
 
 ```
