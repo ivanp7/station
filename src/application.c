@@ -256,6 +256,14 @@ static void exit_release_opencl_quick(void);
 static void exit_print_final_message(void);
 static void exit_print_final_message_quick(void);
 
+enum termination_reason {
+    TR_MAIN,
+    TR_EXIT,
+    TR_QUICK_EXIT,
+};
+
+static void print_final_message(enum termination_reason reason);
+
 int main(int argc, char *argv[])
 {
     AT_EXIT(exit_print_final_message);
@@ -272,21 +280,38 @@ int main(int argc, char *argv[])
     return exit_code;
 }
 
+static void print_final_message(enum termination_reason reason)
+{
+    PRINT("\nTermination reason: " COLOR_STRING);
+
+    switch (reason)
+    {
+        case TR_MAIN:
+            PRINT("reaching end of main()");
+            break;
+
+        case TR_EXIT:
+            PRINT("call of exit()");
+            break;
+
+        case TR_QUICK_EXIT:
+            PRINT("call of quick_exit()");
+            break;
+    }
+
+    PRINT(COLOR_RESET ".\n");
+}
+
 static void exit_print_final_message(void)
 {
     if (application.print_final_message)
-    {
-        if (application.end_of_main_reached)
-            PRINT("\nApplication is terminated by reaching end of main().\n");
-        else
-            PRINT("\nApplication is terminated by exit() call.\n");
-    }
+        print_final_message(application.end_of_main_reached ? TR_MAIN : TR_EXIT);
 }
 
 static void exit_print_final_message_quick(void)
 {
     if (application.print_final_message)
-        PRINT("\nApplication is terminated by quick_exit() call.\n");
+        print_final_message(TR_QUICK_EXIT);
 }
 
 /*****************************************************************************/
