@@ -30,6 +30,7 @@
 
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
+#include <station/signal.def.h>
 
 #include <station/sdl.fun.h>
 #include <station/sdl.typ.h>
@@ -659,7 +660,7 @@ station_signal_management_thread(
 
 #define RAISE_SIGNAL(signal)    \
         case signal:            \
-            atomic_store_explicit(&context->signals->signal_##signal, true, memory_order_release); \
+            STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal); \
             break;
 
         switch (signal)
