@@ -196,7 +196,7 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
                 return;
             }
 
-            // step 2: update texture pixels calling pfunc_draw() from multiple threads
+            // step 2: update texture pixels by calling pfunc_draw() from multiple threads
             station_parallel_processing_execute(resources->parallel_processing_context,
                     pfunc_draw, resources, TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE);
 
