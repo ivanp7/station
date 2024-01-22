@@ -33,10 +33,14 @@ struct station_signal_management_context;
  * @brief Start signal management thread.
  *
  * @warning There should be only one signal management thread per application,
- * which must be started from the main thread.
+ * which must be created in the main thread before any other thread,
+ * otherwise signal management won't work (reliably or at all).
  *
- * Signals, which fields in the set are false, aren't going to be watched.
- * The signal states are initialized to false, and set to true upon capture.
+ * Input set of signals specifies which signals are to be watched
+ * (signals, for which the corresponding flags are true).
+ *
+ * Before the thread is started, all flags are cleared (reset to false).
+ * When a signal is caught, its corresponding flag is set to true.
  *
  * @return Signal management context.
  */
