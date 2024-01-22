@@ -413,6 +413,7 @@ static void initialize(int argc, char *argv[])
     //////////////////////
 
     if (!application.args.no_logo_given)
+    {
         PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
                                                                 \n\
                           █                                     \n\
@@ -427,6 +428,9 @@ static void initialize(int argc, char *argv[])
                                                      by Ivan Podmazov\n\
                                                       (C) 2020-2024\n\
 \n\n" COLOR_RESET);
+
+        fflush(stderr);
+    }
 
     /////////////////////////////////////////////////////
     // Display application version and feature support //
@@ -697,6 +701,7 @@ static void initialize(int argc, char *argv[])
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin help >>>\n");
             PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+            fflush(stderr);
 
             AT_EXIT(exit_end_plugin_help_fn_output);
             AT_QUICK_EXIT(exit_end_plugin_help_fn_output);
@@ -721,6 +726,7 @@ static void initialize(int argc, char *argv[])
     {
         PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin configuration >>>\n");
         PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+        fflush(stderr);
 
         AT_EXIT(exit_end_plugin_conf_fn_output);
         AT_QUICK_EXIT(exit_end_plugin_conf_fn_output);
@@ -1076,6 +1082,7 @@ static int run(void)
         {
             PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin initialization >>>\n");
             PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+            fflush(stderr);
 
             AT_EXIT(exit_end_plugin_init_fn_output);
             AT_QUICK_EXIT(exit_end_plugin_init_fn_output);
@@ -1133,6 +1140,7 @@ static int finalize(bool quick)
     {
         PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin finalization >>>\n");
         PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+        fflush(stderr);
     }
 
     int exit_code = application.plugin.vtable->final_fn(application.plugin.resources, quick);
