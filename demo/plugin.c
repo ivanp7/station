@@ -12,8 +12,20 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <unistd.h> // for alarm()
 
+
+// Parallel processing callback function
+static STATION_PFUNC_CALLBACK(pfunc_cb_flag) // implicit arguments: data, thread_idx
+{
+    (void) thread_idx;
+
+    printf("pfunc_cb_flag()\n");
+
+    atomic_bool *flag = data;
+    *flag = true;
+}
 
 // Parallel processing function
 static STATION_PFUNC(pfunc_inc) // implicit arguments: data, task_idx, thread_idx
@@ -72,9 +84,14 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 
     struct plugin_resources *resources = fsm_data;
 
+    atomic_bool flag = false;
+
     // Increment the counter to check if all task indices were processed
     station_parallel_processing_execute(resources->parallel_processing_context,
-            pfunc_inc, resources, NUM_TASKS, BATCH_SIZE);
+            NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag); // non-blocking call
+
+    // Busy-wait until done
+    while (!flag);
 
     // Sum of [0; N-1] is N*(N-1)/2
     if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
@@ -84,6 +101,33 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
     }
 
     state->sfunc = sfunc_loop;
+}
+
+// State function for the finite state machine
+static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
+{
+    printf("sfunc_post()\n");
+
+    struct plugin_resources *resources = fsm_data;
+
+    atomic_bool flag = false;
+
+    // Decrement the counter back to zero to become twice as sure
+    station_parallel_processing_execute(resources->parallel_processing_context,
+            NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag); // non-blocking call
+
+    // Busy-wait until done
+    while (!flag);
+
+    // Counter must be equal to zero again
+    if (resources->counter != 0)
+    {
+        printf("counter has incorrect value\n");
+        exit(1);
+    }
+
+    // Stop the finite state machine and shut down the application
+    state->sfunc = NULL;
 }
 
 // State function for the finite state machine
@@ -198,7 +242,7 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
 
             // step 2: update texture pixels by calling pfunc_draw() from multiple threads
             station_parallel_processing_execute(resources->parallel_processing_context,
-                    pfunc_draw, resources, TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE);
+                    TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, pfunc_draw, resources, NULL, NULL); // blocking call
 
             // step 3: if have font and text, draw floating text
             if ((resources->font != NULL) && (resources->text != NULL))
@@ -268,27 +312,7 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
 }
 #endif
 
-// State function for the finite state machine
-static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
-{
-    printf("sfunc_post()\n");
-
-    struct plugin_resources *resources = fsm_data;
-
-    // Decrement the counter back to zero to become twice as sure
-    station_parallel_processing_execute(resources->parallel_processing_context,
-            pfunc_dec, resources, NUM_TASKS, BATCH_SIZE);
-
-    if (resources->counter != 0)
-    {
-        printf("counter has incorrect value\n");
-        exit(1);
-    }
-
-    // Stop the finite state machine
-    state->sfunc = NULL;
-}
-
+///////////////////////////////////////////////////////////////////////
 
 // Plugin help function
 static STATION_PLUGIN_HELP_FUNC(plugin_help) // implicit arguments: argc, argv
@@ -426,6 +450,7 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_res
 // Define the plugin
 STATION_PLUGIN("Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final)
 
+///////////////////////////////////////////////////////////////////////
 
 // Make the plugin executable without station-app because we can
 #ifdef __GNUC__

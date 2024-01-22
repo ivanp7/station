@@ -16,8 +16,8 @@
 
 
 // Parameters for parallel execution of pfunc_inc() and pfunc_dec()
-#define NUM_TASKS 128
-#define BATCH_SIZE 16
+#define NUM_TASKS 1024
+#define BATCH_SIZE 16 // number of tasks each thread does at once
 
 #define ALARM_DELAY 5 // argument for alarm()
 
@@ -58,6 +58,8 @@ struct plugin_resources {
 
 
 // Parallel processing functions
+static STATION_PFUNC_CALLBACK(pfunc_cb_flag);
+
 static STATION_PFUNC(pfunc_inc);
 static STATION_PFUNC(pfunc_dec);
 
@@ -67,8 +69,9 @@ static STATION_PFUNC(pfunc_draw);
 
 // State functions for the finite state machine
 static STATION_SFUNC(sfunc_pre);
-static STATION_SFUNC(sfunc_loop);
 static STATION_SFUNC(sfunc_post);
+
+static STATION_SFUNC(sfunc_loop);
 
 #ifdef STATION_IS_SDL_SUPPORTED
 static STATION_SFUNC(sfunc_loop_sdl);

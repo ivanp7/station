@@ -27,6 +27,7 @@
 #define _STATION_PARALLEL_FUN_H_
 
 #include <station/parallel.typ.h>
+#include <stdbool.h>
 
 /**
  * @brief Initialize parallel processing context and create threads.
@@ -52,20 +53,30 @@ station_parallel_processing_destroy_context(
 /**
  * @brief Execute a parallel processing function.
  *
- * Does not return until all tasks are done.
- *
  * If value of batch_size is zero, it is replaced with ((num_tasks - 1) / context->num_threads) + 1.
  * With this batch size pfunc is called no more than once per thread.
+ *
+ * If callback function pointer is NULL, the call is blocking
+ * does not return until all tasks are done.
+ *
+ * If callback function pointer is not NULL, the call is non-blocking
+ * and returns immediately. When all tasks are done, the callback function
+ * is called from one of the threads (which one is unspecified).
+ *
+ * @return True if threads weren't busy and inputs are correct, otherwise false.
  */
-void
+bool
 station_parallel_processing_execute(
         station_parallel_processing_context_t *context, ///< [in] Parallel processing context.
+
+        station_tasks_number_t num_tasks,  ///< [in] Number of tasks to be processed.
+        station_tasks_number_t batch_size, ///< [in] Number of tasks done by a thread per once.
 
         station_pfunc_t pfunc, ///< [in] Parallel processing function.
         void *pfunc_data,      ///< [in] Processed data.
 
-        station_tasks_number_t num_tasks, ///< [in] Number of tasks to be processed.
-        station_tasks_number_t batch_size ///< [in] Number of tasks done by a thread per once.
+        station_pfunc_callback_t callback, ///< [in] Callback function or NULL.
+        void *callback_data                ///< [in] Callback function data.
 );
 
 #endif // _STATION_PARALLEL_FUN_H_

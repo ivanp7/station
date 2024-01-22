@@ -54,7 +54,17 @@ typedef station_thread_idx_t station_threads_number_t;
 typedef void (*station_pfunc_t)(
         void *data, ///< [in,out] Processed data.
         station_task_idx_t task_idx,    ///< [in] Index of the current task.
-        station_thread_idx_t thread_idx ///< [in] Index of the current thread.
+        station_thread_idx_t thread_idx ///< [in] Index of the calling thread.
+);
+
+/**
+ * @brief Parallel processing callback.
+ *
+ * This function is called when parallel processing is complete.
+ */
+typedef void (*station_pfunc_callback_t)(
+        void *data, ///< [in,out] Callback data.
+        station_thread_idx_t thread_idx ///< [in] Index of the calling thread.
 );
 
 /**

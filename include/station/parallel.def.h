@@ -32,5 +32,11 @@
 #define STATION_PFUNC(name) \
     void name(void *data, station_task_idx_t task_idx, station_thread_idx_t thread_idx)
 
+/**
+ * @brief Declarator of a parallel processing callback function.
+ */
+#define STATION_PFUNC_CALLBACK(name) \
+    void name(void *data, station_thread_idx_t thread_idx)
+
 #endif // _STATION_PARALLEL_DEF_H_
 

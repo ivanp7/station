@@ -89,17 +89,17 @@ station_fill_buffer_from_file(
     void *bytes = NULL;
 
     if (fseek(fp, 0, SEEK_END) != 0)
-        goto failure;
+        goto cleanup;
 
     size_t num_bytes = ftell(fp);
     rewind(fp);
 
     bytes = malloc(num_bytes);
     if (bytes == NULL)
-        goto failure;
+        goto cleanup;
 
     if (fread(bytes, 1, num_bytes, fp) != num_bytes)
-        goto failure;
+        goto cleanup;
 
     *buffer = (station_buffer_t){
         .num_bytes = num_bytes, .own_memory = true, .bytes = bytes,
@@ -108,7 +108,7 @@ station_fill_buffer_from_file(
     fclose(fp);
     return true;
 
-failure:
+cleanup:
     free(bytes);
     fclose(fp);
     return false;
@@ -138,6 +138,8 @@ struct station_parallel_processing_threads_state {
         station_threads_number_t num_threads;
         thrd_t *threads;
 
+        atomic_flag busy;
+
         atomic_bool ping_flag;
         atomic_bool pong_flag;
         bool ping_sense;
@@ -156,6 +158,9 @@ struct station_parallel_processing_threads_state {
     struct {
         station_pfunc_t pfunc;
         void *pfunc_data;
+
+        station_pfunc_callback_t callback;
+        void *callback_data;
 
         station_tasks_number_t num_tasks;
         station_tasks_number_t batch_size;
@@ -191,6 +196,9 @@ station_parallel_processing_thread(
 
     station_pfunc_t pfunc;
     void *pfunc_data;
+
+    station_pfunc_callback_t callback;
+    void *callback_data;
 
     station_tasks_number_t num_tasks;
     station_tasks_number_t batch_size;
@@ -242,6 +250,9 @@ station_parallel_processing_thread(
         pfunc = threads_state->current.pfunc;
         pfunc_data = threads_state->current.pfunc_data;
 
+        callback = threads_state->current.callback;
+        callback_data = threads_state->current.callback_data;
+
         num_tasks = threads_state->current.num_tasks;
         batch_size = threads_state->current.batch_size;
 
@@ -268,30 +279,39 @@ station_parallel_processing_thread(
             }
         }
 
-        // Wake master thread
+        // Check if the current thread is the last
         if (atomic_fetch_add_explicit(&threads_state->current.thread_counter, 1,
-                    memory_order_relaxed) == thread_counter_last)
+                    memory_order_seq_cst) == thread_counter_last)
         {
             atomic_store_explicit(&threads_state->persistent.pong_flag,
                     pong_sense, memory_order_release);
 
+            if (callback != NULL)
+                callback(callback_data, thread_idx);
+            else
+            {
+                // Wake master thread
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
-            {
+                {
 #  ifndef NDEBUG
-                int res =
+                    int res =
 #  endif
-                    mtx_lock(&threads_state->persistent.pong_mtx);
-                assert(res == thrd_success);
-            }
-            cnd_broadcast(&threads_state->persistent.pong_cnd);
-            {
+                        mtx_lock(&threads_state->persistent.pong_mtx);
+                    assert(res == thrd_success);
+                }
+                cnd_broadcast(&threads_state->persistent.pong_cnd);
+                {
 #  ifndef NDEBUG
-                int res =
+                    int res =
 #  endif
-                    mtx_unlock(&threads_state->persistent.pong_mtx);
-                assert(res == thrd_success);
-            }
+                        mtx_unlock(&threads_state->persistent.pong_mtx);
+                    assert(res == thrd_success);
+                }
 #endif
+            }
+
+            // Threads are no longer busy
+            atomic_flag_clear_explicit(&threads_state->persistent.busy, memory_order_release);
         }
     }
 
@@ -328,6 +348,8 @@ station_parallel_processing_initialize_context(
 
     threads_state->persistent.num_threads = num_threads;
     threads_state->persistent.threads = NULL;
+
+    threads_state->persistent.busy = (atomic_flag)ATOMIC_FLAG_INIT;
 
     atomic_init(&threads_state->persistent.ping_flag, false);
     atomic_init(&threads_state->persistent.pong_flag, false);
@@ -399,7 +421,8 @@ station_parallel_processing_initialize_context(
 
     for (thread_idx = 0; thread_idx < num_threads; thread_idx++)
     {
-        struct station_parallel_processing_thread_arg *thread_arg = malloc(sizeof(*thread_arg));
+        struct station_parallel_processing_thread_arg *thread_arg =
+            malloc(sizeof(*thread_arg));
         if (thread_arg == NULL)
         {
             code = 1;
@@ -526,37 +549,54 @@ station_parallel_processing_destroy_context(
 #endif // STATION_NO_PARALLEL_PROCESSING
 }
 
-void
+bool
 station_parallel_processing_execute(
         station_parallel_processing_context_t *context,
+
+        station_tasks_number_t num_tasks,
+        station_tasks_number_t batch_size,
 
         station_pfunc_t pfunc,
         void *pfunc_data,
 
-        station_tasks_number_t num_tasks,
-        station_tasks_number_t batch_size)
+        station_pfunc_callback_t callback,
+        void *callback_data)
 {
 #ifdef STATION_NO_PARALLEL_PROCESSING
     (void) context;
     (void) batch_size;
 
     if (pfunc == NULL)
-        return;
+        return false;
 
     for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
         pfunc(pfunc_data, task_idx, 0);
+
+    if (callback != NULL)
+        callback(callback_data, 0);
+
+    return true;
 #else
     if ((context == NULL) || (context->state == NULL) ||
             (pfunc == NULL) || (num_tasks == 0))
-        return;
+        return false;
 
     if (context->state->persistent.num_threads > 0)
     {
-        if (batch_size == 0)
+        // Check if threads are busy, and set the flag if not
+        if (atomic_flag_test_and_set_explicit(&context->state->persistent.busy,
+                    memory_order_acquire))
+            return false;
+
+        if (batch_size == 0) // automatic batch size
             batch_size = (num_tasks - 1) / context->state->persistent.num_threads + 1;
 
         context->state->current.pfunc = pfunc;
         context->state->current.pfunc_data = pfunc_data;
+
+        context->state->current.callback = callback;
+        context->state->current.callback_data = callback_data;
+
         context->state->current.num_tasks = num_tasks;
         context->state->current.batch_size = batch_size;
 
@@ -599,36 +639,43 @@ station_parallel_processing_execute(
         }
 #endif
 
-        // Wait until all tasks are done
-        while (atomic_load_explicit(&context->state->persistent.pong_flag,
-                    memory_order_acquire) != pong_sense)
+        if (callback == NULL)
         {
+            // Wait until all tasks are done
+            while (atomic_load_explicit(&context->state->persistent.pong_flag,
+                        memory_order_acquire) != pong_sense)
+            {
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
 #  ifndef NDEBUG
-            int res =
+                int res =
 #  endif
-                cnd_wait(&context->state->persistent.pong_cnd,
-                        &context->state->persistent.pong_mtx);
-            assert(res == thrd_success);
+                    cnd_wait(&context->state->persistent.pong_cnd,
+                            &context->state->persistent.pong_mtx);
+                assert(res == thrd_success);
 #endif
-        }
+            }
 
 #ifdef STATION_IS_CONDITION_VARIABLES_USED
-        {
+            {
 #  ifndef NDEBUG
-            int res =
+                int res =
 #  endif
-                mtx_unlock(&context->state->persistent.pong_mtx);
-            assert(res == thrd_success);
-        }
+                    mtx_unlock(&context->state->persistent.pong_mtx);
+                assert(res == thrd_success);
+            }
 #endif
-
+        }
     }
     else
     {
         for (station_task_idx_t task_idx = 0; task_idx < num_tasks; task_idx++)
             pfunc(pfunc_data, task_idx, 0);
+
+        if (callback != NULL)
+            callback(callback_data, 0);
     }
+
+    return true;
 #endif // STATION_NO_PARALLEL_PROCESSING
 }
 
