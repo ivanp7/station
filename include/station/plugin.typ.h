@@ -43,12 +43,11 @@ typedef struct station_plugin_conf_func_args {
     void *cmdline; ///< Pointer to store parsed command line arguments.
 
     struct station_signal_set *signals; ///< Signals to watch.
-
-    station_threads_number_t num_threads; ///< Number of parallel processing threads to create.
-
+    bool files_are_used; ///< Whether files are used and should be read.
+    bool parallel_processing_is_used; ///< Whether parallel processing is used and should be initialized.
     bool opencl_is_used; ///< Whether OpenCL is used and should be initialized.
-
     bool sdl_is_used; ///< Whether SDL is used and should be initialized.
+
     uint32_t sdl_init_flags; ///< Flags to pass to SDL_Init() call.
 } station_plugin_conf_func_args_t;
 

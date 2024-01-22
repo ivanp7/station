@@ -88,7 +88,7 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 
     // Increment the counter to check if all task indices were processed
     station_parallel_processing_execute(resources->parallel_processing_context,
-            NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag); // non-blocking call
+            NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag, false); // non-blocking call
 
     // Busy-wait until done
     while (!flag);
@@ -114,7 +114,7 @@ static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
 
     // Decrement the counter back to zero to become twice as sure
     station_parallel_processing_execute(resources->parallel_processing_context,
-            NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag); // non-blocking call
+            NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag, false); // non-blocking call
 
     // Busy-wait until done
     while (!flag);
@@ -242,7 +242,8 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
 
             // step 2: update texture pixels by calling pfunc_draw() from multiple threads
             station_parallel_processing_execute(resources->parallel_processing_context,
-                    TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, pfunc_draw, resources, NULL, NULL); // blocking call
+                    TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, pfunc_draw, resources,
+                    NULL, NULL, resources->parallel_processing_context->busy_wait); // blocking call
 
             // step 3: if have font and text, draw floating text
             if ((resources->font != NULL) && (resources->text != NULL))
@@ -342,10 +343,11 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, 
     args->signals->signal_SIGINT = true;
     args->signals->signal_SIGQUIT = true;
     args->signals->signal_SIGTERM = true;
-
+    args->files_are_used = true;
+    args->parallel_processing_is_used = true;
     args->opencl_is_used = true; // allow contexts to be created
-
     args->sdl_is_used = true;
+
 #ifdef STATION_IS_SDL_SUPPORTED
     args->sdl_init_flags = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
 #endif

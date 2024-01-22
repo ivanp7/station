@@ -27,10 +27,11 @@
 #define _STATION_PARALLEL_FUN_H_
 
 #include <station/parallel.typ.h>
-#include <stdbool.h>
 
 /**
  * @brief Initialize parallel processing context and create threads.
+ *
+ * busy_wait parameter controls waiting behavior of slave threads.
  *
  * @return 0 if succeed, -1 if arguments are incorrect,
  * 1 if malloc() returned NULL, 2 if thrd_create() returned thrd_nomem,
@@ -39,7 +40,8 @@
 int
 station_parallel_processing_initialize_context(
         station_parallel_processing_context_t *context, ///< [out] Context to initialize.
-        station_threads_number_t num_threads ///< [in] Number of parallel processing threads to create.
+        station_threads_number_t num_threads, ///< [in] Number of parallel processing threads to create.
+        bool busy_wait ///< [in] Whether busy-waiting is enabled.
 );
 
 /**
@@ -63,6 +65,8 @@ station_parallel_processing_destroy_context(
  * and returns immediately. When all tasks are done, the callback function
  * is called from one of the threads (which one is unspecified).
  *
+ * busy_wait parameter controls waiting behavior of a calling thread if callback is NULL.
+ *
  * @return True if threads weren't busy and inputs are correct, otherwise false.
  */
 bool
@@ -76,7 +80,9 @@ station_parallel_processing_execute(
         void *pfunc_data,      ///< [in] Processed data.
 
         station_pfunc_callback_t callback, ///< [in] Callback function or NULL.
-        void *callback_data                ///< [in] Callback function data.
+        void *callback_data,               ///< [in] Callback function data.
+
+        bool busy_wait ///< [in] Whether busy-waiting is enabled.
 );
 
 #endif // _STATION_PARALLEL_FUN_H_

@@ -203,6 +203,7 @@ static struct {
 
     struct {
         station_threads_number_t num_threads;
+        bool busy_wait;
         station_parallel_processing_context_t context;
     } parallel_processing;
 
@@ -501,12 +502,6 @@ static void initialize(int argc, char *argv[])
             exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
-        if (application.args.threads_arg < 0)
-        {
-            ERROR("number of threads cannot be negative");
-            exit(STATION_APP_ERROR_ARGUMENTS);
-        }
-
 #ifdef STATION_IS_OPENCL_SUPPORTED
         for (unsigned i = 0; i < application.args.cl_context_given; i++)
         {
@@ -720,7 +715,6 @@ static void initialize(int argc, char *argv[])
     ////////////////////////////////////////
 
     application.plugin.configuration.signals = &application.signal.set;
-    application.plugin.configuration.num_threads = application.args.threads_arg;
 
     if (application.verbose)
     {
@@ -737,8 +731,6 @@ static void initialize(int argc, char *argv[])
 
     if (application.verbose)
         exit_end_plugin_conf_fn_output();
-
-    application.parallel_processing.num_threads = application.plugin.configuration.num_threads;
 
     ///////////////////////////////////
     // Process application arguments //
@@ -811,9 +803,17 @@ static void initialize(int argc, char *argv[])
             PRINT("\n");
         }
 
-        if (application.parallel_processing.num_threads > 0)
-            PRINT_("Threads: " COLOR_NUMBER "%u" COLOR_RESET "\n",
-                    application.parallel_processing.num_threads);
+        if (application.plugin.configuration.parallel_processing_is_used &&
+                (application.args.threads_given > 0))
+        {
+            PRINT("Threads: ");
+            if (application.args.threads_arg >= 0)
+                PRINT_(COLOR_NUMBER "%i" COLOR_RESET "\n",
+                        application.args.threads_arg);
+            else
+                PRINT_(COLOR_NUMBER "%i" COLOR_RESET " (busy wait)\n",
+                        -application.args.threads_arg);
+        }
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
         if (application.plugin.configuration.opencl_is_used &&
@@ -890,33 +890,36 @@ static void initialize(int argc, char *argv[])
     // Create buffers from files //
     ///////////////////////////////
 
-    application.files.num_buffers = application.args.file_given;
-
-    application.files.buffers = malloc(
-            sizeof(*application.files.buffers) * application.files.num_buffers);
-    if (application.files.buffers == NULL)
+    if (application.plugin.configuration.files_are_used)
     {
-        ERROR("couldn't allocate array of file buffers");
-        exit(STATION_APP_ERROR_MALLOC);
-    }
+        application.files.num_buffers = application.args.file_given;
 
-    for (unsigned i = 0; i < application.files.num_buffers; i++)
-        application.files.buffers[i] = (station_buffer_t){0};
-
-    AT_EXIT(exit_destroy_buffers);
-
-    for (unsigned i = 0; i < application.files.num_buffers; i++)
-    {
-        bool success = station_fill_buffer_from_file(
-                &application.files.buffers[i], application.args.file_arg[i]);
-
-        if (!success)
+        application.files.buffers = malloc(
+                sizeof(*application.files.buffers) * application.files.num_buffers);
+        if (application.files.buffers == NULL)
         {
-            ERROR_("couldn't create buffer from file #"
-                    COLOR_NUMBER "%u" COLOR_RESET " '"
-                    COLOR_STRING "%s" COLOR_RESET "'\n",
-                    i, application.args.file_arg[i]);
-            exit(STATION_APP_ERROR_FILE);
+            ERROR("couldn't allocate array of file buffers");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (unsigned i = 0; i < application.files.num_buffers; i++)
+            application.files.buffers[i] = (station_buffer_t){0};
+
+        AT_EXIT(exit_destroy_buffers);
+
+        for (unsigned i = 0; i < application.files.num_buffers; i++)
+        {
+            bool success = station_fill_buffer_from_file(
+                    &application.files.buffers[i], application.args.file_arg[i]);
+
+            if (!success)
+            {
+                ERROR_("couldn't create buffer from file #"
+                        COLOR_NUMBER "%u" COLOR_RESET " '"
+                        COLOR_STRING "%s" COLOR_RESET "'\n",
+                        i, application.args.file_arg[i]);
+                exit(STATION_APP_ERROR_FILE);
+            }
         }
     }
 
@@ -947,20 +950,35 @@ static void initialize(int argc, char *argv[])
     // Create parallel processing threads //
     ////////////////////////////////////////
 
+    if (application.plugin.configuration.parallel_processing_is_used)
     {
-        int code = station_parallel_processing_initialize_context(
-                &application.parallel_processing.context,
-                application.parallel_processing.num_threads);
-
-        if (code != 0)
+        if (application.args.threads_arg >= 0)
         {
-            ERROR_("couldn't create parallel processing threads, got error "
-                    COLOR_ERROR "%i" COLOR_RESET, code);
-            exit(STATION_APP_ERROR_THREADS);
+            application.parallel_processing.num_threads = application.args.threads_arg;
+            application.parallel_processing.busy_wait = false;
+        }
+        else
+        {
+            application.parallel_processing.num_threads = -application.args.threads_arg;
+            application.parallel_processing.busy_wait = true;
         }
 
-        AT_EXIT(exit_stop_threads);
-        AT_QUICK_EXIT(exit_stop_threads);
+        {
+            int code = station_parallel_processing_initialize_context(
+                    &application.parallel_processing.context,
+                    application.parallel_processing.num_threads,
+                    application.parallel_processing.busy_wait);
+
+            if (code != 0)
+            {
+                ERROR_("couldn't create parallel processing threads, got error "
+                        COLOR_ERROR "%i" COLOR_RESET, code);
+                exit(STATION_APP_ERROR_THREADS);
+            }
+
+            AT_EXIT(exit_stop_threads);
+            AT_QUICK_EXIT(exit_stop_threads);
+        }
     }
 
     ////////////////////////////

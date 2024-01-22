@@ -69,10 +69,6 @@ do
             FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED="true"
             ;;
 
-        C) # feature: enable use of condition variables
-            FEATURE_IS_CONDITION_VARIABLES_USED="true"
-            ;;
-
         S) # feature: enable signal management support
             FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED="true"
             ;;
@@ -136,8 +132,7 @@ CFLAGS="-march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors \
 $CFLAGS_COMMON \
 $CFLAGS_BUILD_TYPE"
 
-CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
-${FEATURE_IS_CONDITION_VARIABLES_USED:+"-DSTATION_IS_CONDITION_VARIABLES_USED"}"
+CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
 ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"}"
 

@@ -27,6 +27,7 @@
 #define _STATION_PARALLEL_TYP_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 struct station_parallel_processing_threads_state;
 
@@ -73,6 +74,7 @@ typedef void (*station_pfunc_callback_t)(
 typedef struct station_parallel_processing_context {
     struct station_parallel_processing_threads_state *state; ///< State of parallel processing threads.
     station_threads_number_t num_threads; ///< Number of parallel processing threads.
+    bool busy_wait; ///< Whether busy-waiting is enabled.
 } station_parallel_processing_context_t;
 
 #endif // _STATION_PARALLEL_TYP_H_

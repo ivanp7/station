@@ -145,12 +145,12 @@ struct station_parallel_processing_threads_state {
         bool ping_sense;
         bool pong_sense;
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+        bool use_ping_cnd;
         cnd_t ping_cnd;
-        cnd_t pong_cnd;
         mtx_t ping_mtx;
+
+        cnd_t pong_cnd;
         mtx_t pong_mtx;
-#endif
     } persistent;
 
     bool terminate;
@@ -164,6 +164,8 @@ struct station_parallel_processing_threads_state {
 
         station_tasks_number_t num_tasks;
         station_tasks_number_t batch_size;
+
+        bool use_pong_cnd;
 
         atomic_uint done_tasks;
         atomic_ushort thread_counter;
@@ -192,7 +194,10 @@ station_parallel_processing_thread(
         free(thread_arg);
     }
 
-    const station_threads_number_t thread_counter_last = threads_state->persistent.num_threads - 1;
+    station_threads_number_t thread_counter_last = threads_state->persistent.num_threads - 1;
+
+    bool use_ping_cnd = threads_state->persistent.use_ping_cnd;
+    bool use_pong_cnd;
 
     station_pfunc_t pfunc;
     void *pfunc_data;
@@ -210,39 +215,38 @@ station_parallel_processing_thread(
         ping_sense = !ping_sense;
         pong_sense = !pong_sense;
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+        if (use_ping_cnd)
         {
-#  ifndef NDEBUG
+#ifndef NDEBUG
             int res =
-#  endif
+#endif
                 mtx_lock(&threads_state->persistent.ping_mtx);
             assert(res == thrd_success);
         }
-#endif
 
         // Wait until signal
         while (atomic_load_explicit(&threads_state->persistent.ping_flag,
                     memory_order_acquire) != ping_sense)
         {
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-#  ifndef NDEBUG
-            int res =
-#  endif
-                cnd_wait(&threads_state->persistent.ping_cnd,
-                        &threads_state->persistent.ping_mtx);
-            assert(res == thrd_success);
+            if (use_ping_cnd)
+            {
+#ifndef NDEBUG
+                int res =
 #endif
+                    cnd_wait(&threads_state->persistent.ping_cnd,
+                            &threads_state->persistent.ping_mtx);
+                assert(res == thrd_success);
+            }
         }
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+        if (use_ping_cnd)
         {
-#  ifndef NDEBUG
+#ifndef NDEBUG
             int res =
-#  endif
+#endif
                 mtx_unlock(&threads_state->persistent.ping_mtx);
             assert(res == thrd_success);
         }
-#endif
 
         if (threads_state->terminate)
             break;
@@ -255,6 +259,8 @@ station_parallel_processing_thread(
 
         num_tasks = threads_state->current.num_tasks;
         batch_size = threads_state->current.batch_size;
+
+        use_pong_cnd = threads_state->current.use_pong_cnd;
 
         // Acquire first task
         station_task_idx_t task_idx = atomic_fetch_add_explicit(
@@ -283,31 +289,29 @@ station_parallel_processing_thread(
         if (atomic_fetch_add_explicit(&threads_state->current.thread_counter, 1,
                     memory_order_seq_cst) == thread_counter_last)
         {
+            // Wake master thread or execute callback function
             atomic_store_explicit(&threads_state->persistent.pong_flag,
                     pong_sense, memory_order_release);
 
             if (callback != NULL)
                 callback(callback_data, thread_idx);
-            else
+            else if (use_pong_cnd)
             {
-                // Wake master thread
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
                 {
-#  ifndef NDEBUG
+#ifndef NDEBUG
                     int res =
-#  endif
+#endif
                         mtx_lock(&threads_state->persistent.pong_mtx);
                     assert(res == thrd_success);
                 }
                 cnd_broadcast(&threads_state->persistent.pong_cnd);
                 {
-#  ifndef NDEBUG
+#ifndef NDEBUG
                     int res =
-#  endif
+#endif
                         mtx_unlock(&threads_state->persistent.pong_mtx);
                     assert(res == thrd_success);
                 }
-#endif
             }
 
             // Threads are no longer busy
@@ -323,7 +327,8 @@ station_parallel_processing_thread(
 int
 station_parallel_processing_initialize_context(
         station_parallel_processing_context_t *context,
-        station_threads_number_t num_threads)
+        station_threads_number_t num_threads,
+        bool busy_wait)
 {
 #ifdef STATION_NO_PARALLEL_PROCESSING
     (void) context;
@@ -338,8 +343,6 @@ station_parallel_processing_initialize_context(
 #else
     if (context == NULL)
         return -1;
-
-    int code;
 
     // Initialize threads state
     struct station_parallel_processing_threads_state *threads_state = malloc(sizeof(*threads_state));
@@ -356,7 +359,9 @@ station_parallel_processing_initialize_context(
     threads_state->persistent.ping_sense = false;
     threads_state->persistent.pong_sense = false;
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+    threads_state->persistent.use_ping_cnd = !busy_wait;
+
+    if (threads_state->persistent.use_ping_cnd)
     {
         int res;
 
@@ -369,10 +374,23 @@ station_parallel_processing_initialize_context(
                 return 3;
         }
 
+        res = mtx_init(&threads_state->persistent.ping_mtx, mtx_plain);
+        if (res != thrd_success)
+        {
+            cnd_destroy(&threads_state->persistent.ping_cnd);
+
+            return 3;
+        }
+    }
+
+    {
+        int res;
+
         res = cnd_init(&threads_state->persistent.pong_cnd);
         if (res != thrd_success)
         {
             cnd_destroy(&threads_state->persistent.ping_cnd);
+            mtx_destroy(&threads_state->persistent.ping_mtx);
 
             if (res == thrd_nomem)
                 return 2;
@@ -380,31 +398,23 @@ station_parallel_processing_initialize_context(
                 return 3;
         }
 
-        res = mtx_init(&threads_state->persistent.ping_mtx, mtx_plain);
-        if (res != thrd_success)
-        {
-            cnd_destroy(&threads_state->persistent.ping_cnd);
-            cnd_destroy(&threads_state->persistent.pong_cnd);
-
-            return 3;
-        }
-
         res = mtx_init(&threads_state->persistent.pong_mtx, mtx_plain);
         if (res != thrd_success)
         {
             cnd_destroy(&threads_state->persistent.ping_cnd);
-            cnd_destroy(&threads_state->persistent.pong_cnd);
             mtx_destroy(&threads_state->persistent.ping_mtx);
+            cnd_destroy(&threads_state->persistent.pong_cnd);
 
             return 3;
         }
     }
-#endif
 
     threads_state->terminate = false;
 
     atomic_init(&threads_state->current.done_tasks, 0);
     atomic_init(&threads_state->current.thread_counter, 0);
+
+    int code;
 
     // Create threads
     station_thread_idx_t thread_idx = 0;
@@ -450,6 +460,7 @@ station_parallel_processing_initialize_context(
 
     context->state = threads_state;
     context->num_threads = num_threads;
+    context->busy_wait = busy_wait;
 
     return 0;
 
@@ -460,35 +471,40 @@ cleanup:
     atomic_store_explicit(&threads_state->persistent.ping_flag,
             !threads_state->persistent.ping_sense, memory_order_release);
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+    if (threads_state->persistent.use_ping_cnd)
     {
-#  ifndef NDEBUG
-        int res =
-#  endif
-            mtx_lock(&threads_state->persistent.ping_mtx);
-        assert(res == thrd_success);
-    }
-    cnd_broadcast(&threads_state->persistent.ping_cnd);
-    {
-#  ifndef NDEBUG
-        int res =
-#  endif
-            mtx_unlock(&threads_state->persistent.ping_mtx);
-        assert(res == thrd_success);
-    }
+        {
+#ifndef NDEBUG
+            int res =
 #endif
+                mtx_lock(&threads_state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
+        cnd_broadcast(&threads_state->persistent.ping_cnd);
+        {
+#ifndef NDEBUG
+            int res =
+#endif
+                mtx_unlock(&threads_state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
+    }
 
     for (station_threads_number_t i = 0; i < thread_idx; i++)
         thrd_join(threads_state->persistent.threads[i], (int*)NULL);
 
     free(threads_state->persistent.threads);
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-    cnd_destroy(&threads_state->persistent.ping_cnd);
-    cnd_destroy(&threads_state->persistent.pong_cnd);
-    mtx_destroy(&threads_state->persistent.ping_mtx);
-    mtx_destroy(&threads_state->persistent.pong_mtx);
-#endif
+    if (threads_state->persistent.use_ping_cnd)
+    {
+        cnd_destroy(&threads_state->persistent.ping_cnd);
+        mtx_destroy(&threads_state->persistent.ping_mtx);
+    }
+
+    {
+        cnd_destroy(&threads_state->persistent.pong_cnd);
+        mtx_destroy(&threads_state->persistent.pong_mtx);
+    }
 
     free(threads_state);
 
@@ -512,35 +528,41 @@ station_parallel_processing_destroy_context(
 
     atomic_store_explicit(&context->state->persistent.ping_flag,
             !context->state->persistent.ping_sense, memory_order_release);
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+
+    if (context->state->persistent.use_ping_cnd)
     {
-#  ifndef NDEBUG
-        int res =
-#  endif
-            mtx_lock(&context->state->persistent.ping_mtx);
-        assert(res == thrd_success);
-    }
-    cnd_broadcast(&context->state->persistent.ping_cnd);
-    {
-#  ifndef NDEBUG
-        int res =
-#  endif
-            mtx_unlock(&context->state->persistent.ping_mtx);
-        assert(res == thrd_success);
-    }
+        {
+#ifndef NDEBUG
+            int res =
 #endif
+                mtx_lock(&context->state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
+        cnd_broadcast(&context->state->persistent.ping_cnd);
+        {
+#ifndef NDEBUG
+            int res =
+#endif
+                mtx_unlock(&context->state->persistent.ping_mtx);
+            assert(res == thrd_success);
+        }
+    }
 
     for (station_threads_number_t i = 0; i < context->state->persistent.num_threads; i++)
         thrd_join(context->state->persistent.threads[i], (int*)NULL);
 
     free(context->state->persistent.threads);
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-    cnd_destroy(&context->state->persistent.ping_cnd);
-    cnd_destroy(&context->state->persistent.pong_cnd);
-    mtx_destroy(&context->state->persistent.ping_mtx);
-    mtx_destroy(&context->state->persistent.pong_mtx);
-#endif
+    if (context->state->persistent.use_ping_cnd)
+    {
+        cnd_destroy(&context->state->persistent.ping_cnd);
+        mtx_destroy(&context->state->persistent.ping_mtx);
+    }
+
+    {
+        cnd_destroy(&context->state->persistent.pong_cnd);
+        mtx_destroy(&context->state->persistent.pong_mtx);
+    }
 
     free(context->state);
 
@@ -560,7 +582,9 @@ station_parallel_processing_execute(
         void *pfunc_data,
 
         station_pfunc_callback_t callback,
-        void *callback_data)
+        void *callback_data,
+
+        bool busy_wait)
 {
 #ifdef STATION_NO_PARALLEL_PROCESSING
     (void) context;
@@ -600,6 +624,8 @@ station_parallel_processing_execute(
         context->state->current.num_tasks = num_tasks;
         context->state->current.batch_size = batch_size;
 
+        context->state->current.use_pong_cnd = !busy_wait;
+
         context->state->current.done_tasks = 0;
         context->state->current.thread_counter = 0;
 
@@ -611,59 +637,59 @@ station_parallel_processing_execute(
         // Wake slave threads
         atomic_store_explicit(&context->state->persistent.ping_flag, ping_sense, memory_order_release);
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+        if (context->state->persistent.use_ping_cnd)
         {
-#  ifndef NDEBUG
-            int res =
-#  endif
-                mtx_lock(&context->state->persistent.ping_mtx);
-            assert(res == thrd_success);
-        }
-        cnd_broadcast(&context->state->persistent.ping_cnd);
-        {
-#  ifndef NDEBUG
-            int res =
-#  endif
-                mtx_unlock(&context->state->persistent.ping_mtx);
-            assert(res == thrd_success);
-        }
+            {
+#ifndef NDEBUG
+                int res =
 #endif
-
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-        {
-#  ifndef NDEBUG
-            int res =
-#  endif
-                mtx_lock(&context->state->persistent.pong_mtx);
-            assert(res == thrd_success);
-        }
+                    mtx_lock(&context->state->persistent.ping_mtx);
+                assert(res == thrd_success);
+            }
+            cnd_broadcast(&context->state->persistent.ping_cnd);
+            {
+#ifndef NDEBUG
+                int res =
 #endif
+                    mtx_unlock(&context->state->persistent.ping_mtx);
+                assert(res == thrd_success);
+            }
+        }
 
         if (callback == NULL)
         {
+            if (context->state->current.use_pong_cnd)
+            {
+#ifndef NDEBUG
+                int res =
+#endif
+                    mtx_lock(&context->state->persistent.pong_mtx);
+                assert(res == thrd_success);
+            }
+
             // Wait until all tasks are done
             while (atomic_load_explicit(&context->state->persistent.pong_flag,
                         memory_order_acquire) != pong_sense)
             {
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
-#  ifndef NDEBUG
-                int res =
-#  endif
-                    cnd_wait(&context->state->persistent.pong_cnd,
-                            &context->state->persistent.pong_mtx);
-                assert(res == thrd_success);
+                if (context->state->current.use_pong_cnd)
+                {
+#ifndef NDEBUG
+                    int res =
 #endif
+                        cnd_wait(&context->state->persistent.pong_cnd,
+                                &context->state->persistent.pong_mtx);
+                    assert(res == thrd_success);
+                }
             }
 
-#ifdef STATION_IS_CONDITION_VARIABLES_USED
+            if (context->state->current.use_pong_cnd)
             {
-#  ifndef NDEBUG
+#ifndef NDEBUG
                 int res =
-#  endif
+#endif
                     mtx_unlock(&context->state->persistent.pong_mtx);
                 assert(res == thrd_success);
             }
-#endif
         }
     }
     else
