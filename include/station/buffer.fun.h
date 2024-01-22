@@ -26,24 +26,32 @@
 #ifndef _STATION_BUFFER_FUN_H_
 #define _STATION_BUFFER_FUN_H_
 
+#include <stdbool.h>
+
 struct station_buffer;
 
 /**
- * @brief Read contents of a file into a newly created buffer.
+ * @brief Fill buffer with file contents.
  *
- * @return Buffer, or NULL in case of failure.
+ * Buffer structure fields are discarded and overwritten.
+ * In case of failure, buffer fields are set to default values.
+ *
+ * @return Operation success status (true -- success, false -- failure).
  */
-struct station_buffer*
-station_create_buffer_from_file(
+bool
+station_fill_buffer_from_file(
+        struct station_buffer *buffer, ///< [in] Buffer to read file contents into.
         const char *file ///< [in] Path to file to read data from.
 );
 
 /**
- * @brief Destroy a buffer.
+ * @brief Clear buffer: release memory, reset fields to default values.
+ *
+ * Buffer memory is freed only if it is the buffer's own memory.
  */
 void
-station_destroy_buffer(
-        struct station_buffer *buffer ///< [in] Buffer to destroy.
+station_clear_buffer(
+        struct station_buffer *buffer ///< [in] Buffer to clear.
 );
 
 #endif // _STATION_BUFFER_FUN_H_

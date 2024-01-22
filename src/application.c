@@ -901,16 +901,16 @@ static void initialize(int argc, char *argv[])
     }
 
     for (unsigned i = 0; i < application.files.num_buffers; i++)
-        application.files.buffers[i] = NULL;
+        application.files.buffers[i] = (station_buffer_t){0};
 
     AT_EXIT(exit_destroy_buffers);
 
     for (unsigned i = 0; i < application.files.num_buffers; i++)
     {
-        application.files.buffers[i] = station_create_buffer_from_file(
-                application.args.file_arg[i]);
+        bool success = station_fill_buffer_from_file(
+                &application.files.buffers[i], application.args.file_arg[i]);
 
-        if (application.files.buffers[i] == NULL)
+        if (!success)
         {
             ERROR_("couldn't create buffer from file #"
                     COLOR_NUMBER "%u" COLOR_RESET " '"
@@ -1012,7 +1012,7 @@ static void exit_destroy_buffers(void)
 {
     if (application.files.buffers != NULL)
         for (size_t i = 0; i < application.files.num_buffers; i++)
-            station_destroy_buffer(application.files.buffers[i]);
+            station_clear_buffer(&application.files.buffers[i]);
 
     free(application.files.buffers);
 }

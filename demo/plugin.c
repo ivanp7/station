@@ -377,7 +377,7 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
     {
         // Load a font
         resources->font = station_load_font_psf2_from_buffer(
-                inputs->files->buffers[0]);
+                &inputs->files->buffers[0]);
 
         if (resources->font == NULL)
             printf("Couldn't load PSFv2 font from file #0\n");

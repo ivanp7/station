@@ -69,48 +69,53 @@
 // buffer.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
-station_buffer_t*
-station_create_buffer_from_file(
+bool
+station_fill_buffer_from_file(
+        station_buffer_t* buffer,
         const char *file)
 {
+    if (buffer == NULL)
+        return false;
+
+    *buffer = (station_buffer_t){0};
+
+    if (file == NULL)
+        return false;
+
     FILE *fp = fopen(file, "rb");
     if (fp == NULL)
-        return NULL;
+        return false;
 
-    station_buffer_t *buffer = NULL;
+    void *bytes = NULL;
 
     if (fseek(fp, 0, SEEK_END) != 0)
-        goto cleanup;
+        goto failure;
 
-    buffer = malloc(sizeof(*buffer));
-    if (buffer == NULL)
-        goto cleanup;
-
-    buffer->num_bytes = ftell(fp);
+    size_t num_bytes = ftell(fp);
     rewind(fp);
 
-    buffer->own_memory = true;
+    bytes = malloc(num_bytes);
+    if (bytes == NULL)
+        goto failure;
 
-    buffer->bytes = malloc(buffer->num_bytes);
-    if (buffer->bytes == NULL)
-        goto cleanup;
+    if (fread(bytes, 1, num_bytes, fp) != num_bytes)
+        goto failure;
 
-    if (fread(buffer->bytes, 1, buffer->num_bytes, fp) != buffer->num_bytes)
-        goto cleanup;
+    *buffer = (station_buffer_t){
+        .num_bytes = num_bytes, .own_memory = true, .bytes = bytes,
+    };
 
     fclose(fp);
-    return buffer;
+    return true;
 
-cleanup:
-    if (buffer != NULL)
-        free(buffer->bytes);
-    free(buffer);
+failure:
+    free(bytes);
     fclose(fp);
-    return NULL;
+    return false;
 }
 
 void
-station_destroy_buffer(
+station_clear_buffer(
         station_buffer_t *buffer)
 {
     if (buffer == NULL)
@@ -119,7 +124,7 @@ station_destroy_buffer(
     if (buffer->own_memory)
         free(buffer->bytes);
 
-    free(buffer);
+    *buffer = (station_buffer_t){0};
 }
 
 ///////////////////////////////////////////////////////////////////////////////

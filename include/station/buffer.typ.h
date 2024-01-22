@@ -43,7 +43,7 @@ typedef struct station_buffer {
  */
 typedef struct station_buffers_array {
     size_t num_buffers;
-    station_buffer_t **buffers;
+    station_buffer_t *buffers;
 } station_buffers_array_t;
 
 #endif // _STATION_BUFFER_TYP_H_
