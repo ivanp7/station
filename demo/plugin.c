@@ -163,24 +163,25 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
     if (resources->sdl_window_created)
     {
         // Process SDL events
-        SDL_PollEvent(&resources->event);
-
-        if (resources->event.type == SDL_QUIT)
+        while (SDL_PollEvent(&resources->event))
         {
-            printf("Window is closed, bye!\n");
-            state->sfunc = sfunc_post;
-            return;
+            if (resources->event.type == SDL_QUIT)
+            {
+                printf("Window is closed, bye!\n");
+                state->sfunc = sfunc_post;
+                return;
+            }
+            else if ((resources->event.type == SDL_KEYDOWN) &&
+                    (resources->event.key.keysym.sym == SDLK_ESCAPE))
+            {
+                printf("Escape is pressed, bye!\n");
+                state->sfunc = sfunc_post;
+                return;
+            }
+            else if ((resources->event.type == SDL_KEYDOWN) &&
+                    (resources->event.key.keysym.sym == SDLK_SPACE))
+                resources->window_frozen = !resources->window_frozen;
         }
-        else if ((resources->event.type == SDL_KEYDOWN) &&
-                (resources->event.key.keysym.sym == SDLK_ESCAPE))
-        {
-            printf("Escape is pressed, bye!\n");
-            state->sfunc = sfunc_post;
-            return;
-        }
-        else if ((resources->event.type == SDL_KEYDOWN) &&
-                (resources->event.key.keysym.sym == SDLK_SPACE))
-            resources->window_frozen = !resources->window_frozen;
 
         if (!resources->window_frozen)
         {
