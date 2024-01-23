@@ -31,9 +31,9 @@
 #endif
 
 /**
- * @brief OpenCL context for a finite state machine.
+ * @brief Array of OpenCL contexts and platform/device IDs.
  */
-typedef struct station_opencl_context {
+typedef struct station_opencl_contexts_array {
 #ifdef STATION_IS_OPENCL_SUPPORTED
     cl_context *contexts; ///< Array of OpenCL platform contexts.
     struct {
@@ -45,7 +45,7 @@ typedef struct station_opencl_context {
 #else
     unsigned int num_platforms; // must be zero
 #endif
-} station_opencl_context_t;
+} station_opencl_contexts_array_t;
 
 #endif // _STATION_OPENCL_TYP_H_
 

@@ -568,6 +568,7 @@ station_parallel_processing_destroy_context(
 
     context->state = NULL;
     context->num_threads = 0;
+    context->busy_wait = false;
 #endif // STATION_NO_PARALLEL_PROCESSING
 }
 

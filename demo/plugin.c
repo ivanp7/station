@@ -84,20 +84,23 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 
     struct plugin_resources *resources = fsm_data;
 
-    atomic_bool flag = false;
-
-    // Increment the counter to check if all task indices were processed
-    station_parallel_processing_execute(resources->parallel_processing_context,
-            NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag, false); // non-blocking call
-
-    // Busy-wait until done
-    while (!flag);
-
-    // Sum of [0; N-1] is N*(N-1)/2
-    if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+    if (resources->parallel_processing_context != NULL)
     {
-        printf("counter has incorrect value\n");
-        exit(1);
+        atomic_bool flag = false;
+
+        // Increment the counter to check if all task indices were processed
+        station_parallel_processing_execute(resources->parallel_processing_context,
+                NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag, false); // non-blocking call
+
+        // Busy-wait until done
+        while (!flag);
+
+        // Sum of [0; N-1] is N*(N-1)/2
+        if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+        {
+            printf("counter has incorrect value\n");
+            exit(1);
+        }
     }
 
     state->sfunc = sfunc_loop;
@@ -110,20 +113,23 @@ static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
 
     struct plugin_resources *resources = fsm_data;
 
-    atomic_bool flag = false;
-
-    // Decrement the counter back to zero to become twice as sure
-    station_parallel_processing_execute(resources->parallel_processing_context,
-            NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag, false); // non-blocking call
-
-    // Busy-wait until done
-    while (!flag);
-
-    // Counter must be equal to zero again
-    if (resources->counter != 0)
+    if (resources->parallel_processing_context != NULL)
     {
-        printf("counter has incorrect value\n");
-        exit(1);
+        atomic_bool flag = false;
+
+        // Decrement the counter back to zero to become twice as sure
+        station_parallel_processing_execute(resources->parallel_processing_context,
+                NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag, false); // non-blocking call
+
+        // Busy-wait until done
+        while (!flag);
+
+        // Counter must be equal to zero again
+        if (resources->counter != 0)
+        {
+            printf("counter has incorrect value\n");
+            exit(1);
+        }
     }
 
     // Stop the finite state machine and shut down the application
@@ -241,9 +247,13 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
             }
 
             // step 2: update texture pixels by calling pfunc_draw() from multiple threads
-            station_parallel_processing_execute(resources->parallel_processing_context,
-                    TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, pfunc_draw, resources,
-                    NULL, NULL, resources->parallel_processing_context->busy_wait); // blocking call
+            if (resources->parallel_processing_context != NULL)
+                station_parallel_processing_execute(resources->parallel_processing_context,
+                        TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, pfunc_draw, resources,
+                        NULL, NULL, resources->parallel_processing_context->busy_wait); // blocking call
+            else
+                for (station_task_idx_t task_idx = 0; task_idx < TEXTURE_WIDTH*TEXTURE_HEIGHT; task_idx++)
+                    pfunc_draw(resources, task_idx, 0);
 
             // step 3: if have font and text, draw floating text
             if ((resources->font != NULL) && (resources->text != NULL))
@@ -372,7 +382,10 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
 
     resources->signals = inputs->signals;
 
-    resources->parallel_processing_context = inputs->parallel_processing_context;
+    if (inputs->parallel_processing_contexts->num_contexts > 0)
+        resources->parallel_processing_context = &inputs->parallel_processing_contexts->contexts[0];
+    else
+        resources->parallel_processing_context = NULL;
 
     if (inputs->sdl_is_available)
     {

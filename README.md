@@ -72,7 +72,7 @@ station-app --help [PLUGIN_FILE [-- [plugin help options...]]]
 station-app --cl-list[=TYPE]
 
 
-  -C, --conf=FILE               Parse arguments from file (multiple allowed)
+  -C, --conf=FILE               (multiple) Parse arguments from file
 
 Alternative modes:
   -h, --help                    Display usage help for app or plugin
@@ -81,17 +81,18 @@ Alternative modes:
                                   default=`devices')
 
 Output options:
-      --no-logo                 Don't display application logo
+  -Q, --no-logo                 Don't display application logo
   -v, --verbose                 Display more information
 
 Execution options:
-  -j, --threads=THREADS         Number of threads
+  -j, --threads=[-]THREADS      (multiple) Create parallel processing context,
+                                  negative means busy-wait
   -c, --cl-context=PLATFORM_IDX[:DEVICE_IDX_MASK]
-                                Create OpenCL context (multiple allowed)
+                                (multiple) Create OpenCL context
   -n, --no-sdl                  Don't initialize SDL subsystems
 
 Data options:
-  -f, --file=FILE               Create data buffer from file (multiple allowed)
+  -f, --file=FILE               (multiple) Create data buffer from file
 
 Signal management:
       --SIGHUP                  Watch signal #1
@@ -105,6 +106,7 @@ Signal management:
       --SIGTTIN                 Watch signal #21
       --SIGTTOU                 Watch signal #22
       --SIGWINCH                Watch signal #28
+
 ```
 
 ## How to build

@@ -28,6 +28,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 struct station_parallel_processing_threads_state;
 
@@ -76,6 +77,14 @@ typedef struct station_parallel_processing_context {
     station_threads_number_t num_threads; ///< Number of parallel processing threads.
     bool busy_wait; ///< Whether busy-waiting is enabled.
 } station_parallel_processing_context_t;
+
+/**
+ * @brief Array of parallel processing contexts.
+ */
+typedef struct station_parallel_processing_contexts_array {
+    size_t num_contexts;
+    station_parallel_processing_context_t *contexts;
+} station_parallel_processing_contexts_array_t;
 
 #endif // _STATION_PARALLEL_TYP_H_
 

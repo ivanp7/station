@@ -27,14 +27,14 @@
 #define _STATION_PLUGIN_TYP_H_
 
 #include <station/fsm.typ.h>
-#include <station/parallel.typ.h>
 
 #include <stdint.h>
 #include <stdbool.h>
 
 struct station_buffers_array;
 struct station_signal_set;
-struct station_opencl_context;
+struct station_parallel_processing_contexts_array;
+struct station_opencl_contexts_array;
 
 /**
  * @brief Arguments for plugin configuration function.
@@ -61,8 +61,8 @@ typedef struct station_plugin_init_func_inputs {
 
     struct station_signal_set *signals; ///< States of signals.
 
-    station_parallel_processing_context_t *parallel_processing_context; ///< Parallel processing context.
-    struct station_opencl_context *opencl_context; ///< OpenCL context.
+    struct station_parallel_processing_contexts_array *parallel_processing_contexts; ///< Parallel processing contexts.
+    struct station_opencl_contexts_array *opencl_contexts; ///< OpenCL contexts.
 
     bool sdl_is_available; ///< Whether SDL is available for use.
 } station_plugin_init_func_inputs_t;

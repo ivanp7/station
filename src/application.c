@@ -202,13 +202,11 @@ static struct {
     } signal;
 
     struct {
-        station_threads_number_t num_threads;
-        bool busy_wait;
-        station_parallel_processing_context_t context;
+        station_parallel_processing_contexts_array_t contexts;
     } parallel_processing;
 
     struct {
-        station_opencl_context_t context;
+        station_opencl_contexts_array_t contexts;
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
         struct {
@@ -271,8 +269,8 @@ static void prepare_opencl_tmp_arrays(void);
 static void create_opencl_contexts(void);
 static void release_opencl_tmp_arrays(void);
 
-static void exit_release_opencl(void);
-static void exit_release_opencl_quick(void);
+static void exit_release_opencl_contexts(void);
+static void exit_release_opencl_contexts_quick(void);
 
 #endif
 
@@ -400,15 +398,6 @@ static void initialize(int argc, char *argv[])
         }
     }
 
-    //////////////////////////////////////
-    // Preprocess application arguments //
-    //////////////////////////////////////
-
-    application.verbose = application.args.verbose_given;
-
-    if (!application.args.threads_given)
-        application.args.threads_arg = 0;
-
     //////////////////////
     // Display the logo //
     //////////////////////
@@ -436,6 +425,8 @@ static void initialize(int argc, char *argv[])
     /////////////////////////////////////////////////////
     // Display application version and feature support //
     /////////////////////////////////////////////////////
+
+    application.verbose = application.args.verbose_given;
 
     if (application.verbose)
     {
@@ -757,6 +748,8 @@ static void initialize(int argc, char *argv[])
     WATCH_SIGNAL(SIGWINCH);
 
 #  undef WATCH_SIGNAL
+#else
+    application.signal.management_used = false;
 #endif
 
 #ifndef STATION_IS_OPENCL_SUPPORTED
@@ -806,13 +799,20 @@ static void initialize(int argc, char *argv[])
         if (application.plugin.configuration.parallel_processing_is_used &&
                 (application.args.threads_given > 0))
         {
-            PRINT("Threads: ");
-            if (application.args.threads_arg >= 0)
-                PRINT_(COLOR_NUMBER "%i" COLOR_RESET "\n",
-                        application.args.threads_arg);
-            else
-                PRINT_(COLOR_NUMBER "%i" COLOR_RESET " (busy wait)\n",
-                        -application.args.threads_arg);
+            PRINT_("Parallel processing contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
+                    application.args.threads_given);
+
+            for (unsigned i = 0; i < application.args.threads_given; i++)
+            {
+                PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: ", i);
+
+                if (application.args.threads_arg[i] >= 0)
+                    PRINT_(COLOR_NUMBER "%i" COLOR_RESET " threads (waiting on condition variable)\n",
+                            application.args.threads_arg[i]);
+                else
+                    PRINT_(COLOR_NUMBER "%i" COLOR_RESET " threads (busy waiting)\n",
+                            -application.args.threads_arg[i]);
+            }
         }
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
@@ -874,7 +874,8 @@ static void initialize(int argc, char *argv[])
         }
 #endif
 
-        if (application.args.file_given > 0)
+        if (application.plugin.configuration.files_are_used &&
+                (application.args.file_given > 0))
         {
             PRINT_("Files: " COLOR_NUMBER "%u" COLOR_RESET "\n", application.args.file_given);
 
@@ -890,7 +891,8 @@ static void initialize(int argc, char *argv[])
     // Create buffers from files //
     ///////////////////////////////
 
-    if (application.plugin.configuration.files_are_used)
+    if ((application.plugin.configuration.files_are_used) &&
+            (application.args.file_given > 0))
     {
         application.files.num_buffers = application.args.file_given;
 
@@ -950,34 +952,53 @@ static void initialize(int argc, char *argv[])
     // Create parallel processing threads //
     ////////////////////////////////////////
 
-    if (application.plugin.configuration.parallel_processing_is_used)
+    if ((application.plugin.configuration.parallel_processing_is_used) &&
+            (application.args.threads_given > 0))
     {
-        if (application.args.threads_arg >= 0)
+        application.parallel_processing.contexts.num_contexts = application.args.threads_given;
+
+        application.parallel_processing.contexts.contexts = malloc(
+                sizeof(*application.parallel_processing.contexts.contexts) *
+                application.parallel_processing.contexts.num_contexts);
+        if (application.parallel_processing.contexts.contexts == NULL)
         {
-            application.parallel_processing.num_threads = application.args.threads_arg;
-            application.parallel_processing.busy_wait = false;
-        }
-        else
-        {
-            application.parallel_processing.num_threads = -application.args.threads_arg;
-            application.parallel_processing.busy_wait = true;
+            ERROR("couldn't allocate array of parallel processing contexts");
+            exit(STATION_APP_ERROR_MALLOC);
         }
 
+        for (unsigned i = 0; i < application.parallel_processing.contexts.num_contexts; i++)
+            application.parallel_processing.contexts.contexts[i].state = NULL;
+
+        AT_EXIT(exit_stop_threads);
+        AT_QUICK_EXIT(exit_stop_threads);
+
+        for (unsigned i = 0; i < application.parallel_processing.contexts.num_contexts; i++)
         {
+            station_threads_number_t num_threads;
+            bool busy_wait;
+
+            if (application.args.threads_arg[i] >= 0)
+            {
+                num_threads = application.args.threads_arg[i];
+                busy_wait = false;
+            }
+            else
+            {
+                num_threads = -application.args.threads_arg[i];
+                busy_wait = true;
+            }
+
             int code = station_parallel_processing_initialize_context(
-                    &application.parallel_processing.context,
-                    application.parallel_processing.num_threads,
-                    application.parallel_processing.busy_wait);
+                    &application.parallel_processing.contexts.contexts[i],
+                    num_threads, busy_wait);
 
             if (code != 0)
             {
-                ERROR_("couldn't create parallel processing threads, got error "
-                        COLOR_ERROR "%i" COLOR_RESET, code);
+                ERROR_("couldn't create parallel processing context #"
+                        COLOR_NUMBER "%u" COLOR_RESET ", got error "
+                        COLOR_ERROR "%i" COLOR_RESET, i, code);
                 exit(STATION_APP_ERROR_THREADS);
             }
-
-            AT_EXIT(exit_stop_threads);
-            AT_QUICK_EXIT(exit_stop_threads);
         }
     }
 
@@ -986,10 +1007,11 @@ static void initialize(int argc, char *argv[])
     ////////////////////////////
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-    if (application.plugin.configuration.opencl_is_used)
+    if ((application.plugin.configuration.opencl_is_used) &&
+            (application.args.cl_context_given > 0))
     {
-        AT_EXIT(exit_release_opencl);
-        AT_QUICK_EXIT(exit_release_opencl_quick);
+        AT_EXIT(exit_release_opencl_contexts);
+        AT_QUICK_EXIT(exit_release_opencl_contexts_quick);
 
         prepare_opencl_tmp_arrays();
         create_opencl_contexts();
@@ -1044,7 +1066,11 @@ static void exit_stop_signal_management_thread(void)
 
 static void exit_stop_threads(void)
 {
-    station_parallel_processing_destroy_context(&application.parallel_processing.context);
+    if (application.parallel_processing.contexts.contexts != NULL)
+        for (unsigned i = 0; i < application.parallel_processing.contexts.num_contexts; i++)
+            station_parallel_processing_destroy_context(&application.parallel_processing.contexts.contexts[i]);
+
+    free(application.parallel_processing.contexts.contexts);
 }
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -1089,8 +1115,8 @@ static int run(void)
             .cmdline = application.plugin.configuration.cmdline,
             .files = &application.files,
             .signals = &application.signal.set,
-            .parallel_processing_context = &application.parallel_processing.context,
-            .opencl_context = &application.opencl.context,
+            .parallel_processing_contexts = &application.parallel_processing.contexts,
+            .opencl_contexts = &application.opencl.contexts,
             .sdl_is_available = application.plugin.configuration.sdl_is_used,
         };
 
@@ -1417,39 +1443,39 @@ static void prepare_opencl_tmp_arrays(void)
 
 static void create_opencl_contexts(void)
 {
-    application.opencl.context.num_platforms = application.args.cl_context_given;
+    application.opencl.contexts.num_platforms = application.args.cl_context_given;
 
     // Allocate array of contexts
-    application.opencl.context.contexts = malloc(sizeof(cl_context) *
-            application.opencl.context.num_platforms);
-    if (application.opencl.context.contexts == NULL)
+    application.opencl.contexts.contexts = malloc(sizeof(cl_context) *
+            application.opencl.contexts.num_platforms);
+    if (application.opencl.contexts.contexts == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platform contexts");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
-    for (cl_uint i = 0; i < application.opencl.context.num_platforms; i++)
-        application.opencl.context.contexts[i] = NULL;
+    for (cl_uint i = 0; i < application.opencl.contexts.num_platforms; i++)
+        application.opencl.contexts.contexts[i] = NULL;
 
     // Allocate array of platforms
-    application.opencl.context.platforms = malloc(
-            sizeof(*application.opencl.context.platforms) *
-            application.opencl.context.num_platforms);
-    if (application.opencl.context.platforms == NULL)
+    application.opencl.contexts.platforms = malloc(
+            sizeof(*application.opencl.contexts.platforms) *
+            application.opencl.contexts.num_platforms);
+    if (application.opencl.contexts.platforms == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platforms");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
-    for (cl_uint i = 0; i < application.opencl.context.num_platforms; i++)
+    for (cl_uint i = 0; i < application.opencl.contexts.num_platforms; i++)
     {
-        application.opencl.context.platforms[i].platform_id = NULL;
-        application.opencl.context.platforms[i].device_ids = NULL;
-        application.opencl.context.platforms[i].num_devices = 0;
+        application.opencl.contexts.platforms[i].platform_id = NULL;
+        application.opencl.contexts.platforms[i].device_ids = NULL;
+        application.opencl.contexts.platforms[i].num_devices = 0;
     }
 
     // Create contexts
-    for (cl_uint i = 0; i < application.opencl.context.num_platforms; i++)
+    for (cl_uint i = 0; i < application.opencl.contexts.num_platforms; i++)
     {
         // Extract platform index
         cl_uint platform_idx = strtoul(application.args.cl_context_arg[i], (char**)NULL, 16);
@@ -1472,12 +1498,12 @@ static void create_opencl_contexts(void)
         }
 
         // Copy platform ID
-        application.opencl.context.platforms[i].platform_id =
+        application.opencl.contexts.platforms[i].platform_id =
             application.opencl.tmp.platform_list[platform_idx];
 
         // Compute number of devices from device mask
         if (device_mask == NULL)
-            application.opencl.context.platforms[i].num_devices =
+            application.opencl.contexts.platforms[i].num_devices =
                 application.opencl.tmp.num_devices[platform_idx];
         else
         {
@@ -1492,11 +1518,11 @@ static void create_opencl_contexts(void)
                 else
                     chr -= '0';
 
-                application.opencl.context.platforms[i].num_devices +=
+                application.opencl.contexts.platforms[i].num_devices +=
                     (int[16]){0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4}[chr];
             }
 
-            if (application.opencl.context.platforms[i].num_devices >
+            if (application.opencl.contexts.platforms[i].num_devices >
                     application.opencl.tmp.num_devices[platform_idx])
             {
                 ERROR_("OpenCL device mask " COLOR_NUMBER "%s" COLOR_RESET
@@ -1510,9 +1536,9 @@ static void create_opencl_contexts(void)
         }
 
         // Allocate array of devices
-        application.opencl.context.platforms[i].device_ids = malloc(
-                sizeof(cl_device_id) * application.opencl.context.platforms[i].num_devices);
-        if (application.opencl.context.platforms[i].device_ids == NULL)
+        application.opencl.contexts.platforms[i].device_ids = malloc(
+                sizeof(cl_device_id) * application.opencl.contexts.platforms[i].num_devices);
+        if (application.opencl.contexts.platforms[i].device_ids == NULL)
         {
             ERROR("couldn't allocate array of OpenCL devices");
             exit(STATION_APP_ERROR_MALLOC);
@@ -1523,7 +1549,7 @@ static void create_opencl_contexts(void)
         {
             for (cl_uint device_idx = 0; device_idx <
                     application.opencl.tmp.num_devices[platform_idx]; device_idx++)
-                application.opencl.context.platforms[i].device_ids[device_idx] =
+                application.opencl.contexts.platforms[i].device_ids[device_idx] =
                     application.opencl.tmp.device_list[platform_idx][device_idx];
         }
         else
@@ -1555,7 +1581,7 @@ static void create_opencl_contexts(void)
                             exit(STATION_APP_ERROR_ARGUMENTS);
                         }
 
-                        application.opencl.context.platforms[i].device_ids[j++] =
+                        application.opencl.contexts.platforms[i].device_ids[j++] =
                             application.opencl.tmp.device_list[platform_idx][device_idx];
                     }
 
@@ -1568,11 +1594,11 @@ static void create_opencl_contexts(void)
         cl_int ret;
 
         cl_context_properties context_properties[] = {CL_CONTEXT_PLATFORM,
-            (cl_context_properties)application.opencl.context.platforms[i].platform_id, 0};
+            (cl_context_properties)application.opencl.contexts.platforms[i].platform_id, 0};
 
-        application.opencl.context.contexts[i] = clCreateContext(context_properties,
-                application.opencl.context.platforms[i].num_devices,
-                application.opencl.context.platforms[i].device_ids,
+        application.opencl.contexts.contexts[i] = clCreateContext(context_properties,
+                application.opencl.contexts.platforms[i].num_devices,
+                application.opencl.contexts.platforms[i].device_ids,
                 NULL, (void*)NULL, &ret);
         if (ret != CL_SUCCESS)
         {
@@ -1600,33 +1626,33 @@ static void release_opencl_tmp_arrays(void)
     application.opencl.tmp.device_list = NULL;
 }
 
-static void exit_release_opencl(void)
+static void exit_release_opencl_contexts(void)
 {
-    exit_release_opencl_quick();
+    exit_release_opencl_contexts_quick();
 
-    if (application.opencl.context.contexts != NULL)
-        free(application.opencl.context.contexts);
+    if (application.opencl.contexts.contexts != NULL)
+        free(application.opencl.contexts.contexts);
 
-    if (application.opencl.context.platforms != NULL)
+    if (application.opencl.contexts.platforms != NULL)
     {
-        for (uint32_t i = 0; i < application.opencl.context.num_platforms; i++)
-            free(application.opencl.context.platforms[i].device_ids);
+        for (uint32_t i = 0; i < application.opencl.contexts.num_platforms; i++)
+            free(application.opencl.contexts.platforms[i].device_ids);
 
-        free(application.opencl.context.platforms);
+        free(application.opencl.contexts.platforms);
     }
 
-    application.opencl.context.num_platforms = 0;
+    application.opencl.contexts.num_platforms = 0;
 
     release_opencl_tmp_arrays();
 }
 
-static void exit_release_opencl_quick(void)
+static void exit_release_opencl_contexts_quick(void)
 {
-    if (application.opencl.context.contexts != NULL)
+    if (application.opencl.contexts.contexts != NULL)
     {
-        for (uint32_t i = 0; i < application.opencl.context.num_platforms; i++)
-            if (application.opencl.context.contexts[i] != NULL)
-                clReleaseContext(application.opencl.context.contexts[i]);
+        for (uint32_t i = 0; i < application.opencl.contexts.num_platforms; i++)
+            if (application.opencl.contexts.contexts[i] != NULL)
+                clReleaseContext(application.opencl.contexts.contexts[i]);
     }
 }
 
