@@ -35,6 +35,9 @@
 #  include <SDL.h>
 #endif
 
+#include <station/application.fun.h>
+#include <station/application.def.h>
+
 #include <station/plugin.typ.h>
 #include <station/plugin.def.h>
 
@@ -48,8 +51,6 @@
 
 #include <station/sdl.typ.h>
 #include <station/opencl.typ.h>
-
-#include <station/application.def.h>
 
 #include "application_args.h"
 
@@ -184,8 +185,7 @@ static struct {
         char **argv;
 
         void *handle;
-
-        station_plugin_format_t *format;
+        bool built_in;
         station_plugin_vtable_t *vtable;
 
         station_plugin_conf_func_args_t configuration;
@@ -288,8 +288,19 @@ enum termination_reason {
 
 static void print_final_message(enum termination_reason reason);
 
-int main(int argc, char *argv[])
+int
+station_app_main(
+        int argc,
+        char *argv[],
+
+        station_plugin_vtable_t *plugin_vtable)
 {
+    if (plugin_vtable != NULL)
+    {
+        application.plugin.vtable = plugin_vtable;
+        application.plugin.built_in = true;
+    }
+
     AT_EXIT(exit_print_final_message);
     AT_QUICK_EXIT(exit_print_final_message_quick);
 
@@ -464,9 +475,15 @@ static void initialize(int argc, char *argv[])
     // Check correctness of application arguments //
     ////////////////////////////////////////////////
 
+    if (application.plugin.built_in && (application.args.inputs_num > 0))
+    {
+        ERROR("a application with built-in plugin doesn't accept plugin file argument");
+        exit(STATION_APP_ERROR_ARGUMENTS);
+    }
+
     if (application.args.cl_list_given)
     {
-        if (application.args.inputs_num != 0)
+        if (application.args.inputs_num > 0)
         {
             ERROR("processing a plugin file after displaying list of OpenCL platforms/devices is not supported");
             exit(STATION_APP_ERROR_ARGUMENTS);
@@ -558,11 +575,34 @@ static void initialize(int argc, char *argv[])
     // Display application usage help //
     ////////////////////////////////////
 
-    if (application.args.help_given && (application.args.inputs_num == 0))
+    if (application.args.help_given)
     {
-        args_parser_print_help();
-
-        exit(EXIT_SUCCESS);
+        if (!application.plugin.built_in)
+        {
+            if (application.args.inputs_num == 0)
+            {
+                PRINT("\n\
+station-app [options...] PLUGIN_FILE [-- [plugin options...]]\n\
+    or\n\
+station-app --help [PLUGIN_FILE [-- [plugin help options...]]]\n\
+    or\n\
+station-app --cl-list[=TYPE]\n\
+");
+                args_parser_print_help();
+                exit(EXIT_SUCCESS);
+            }
+        }
+        else
+        {
+            PRINT("\n\
+station-app [options...] [-- [plugin options...]]\n\
+    or\n\
+station-app --help [-- [plugin help options...]]\n\
+    or\n\
+station-app --cl-list[=TYPE]\n\
+");
+            args_parser_print_help();
+        }
     }
 
     //////////////////////////////////////////////
@@ -582,7 +622,7 @@ static void initialize(int argc, char *argv[])
     // Exit if no plugin file is provided //
     ////////////////////////////////////////
 
-    if (application.args.inputs_num == 0)
+    if (!application.plugin.built_in && (application.args.inputs_num == 0))
     {
         if (application.verbose)
             PRINT("Plugin file is not specified, exiting.\n");
@@ -596,7 +636,11 @@ static void initialize(int argc, char *argv[])
 
     if (application.verbose)
     {
-        PRINT_("Plugin file: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.inputs[0]);
+        if (!application.plugin.built_in)
+            PRINT_("Plugin file: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.inputs[0]);
+        else
+            PRINT("Plugin is built-in\n");
+
         if (application.plugin.argc > 0)
         {
             PRINT_("  " COLOR_NUMBER "%i" COLOR_RESET " arguments:\n",
@@ -615,68 +659,71 @@ static void initialize(int argc, char *argv[])
     // Load plugin file //
     //////////////////////
 
-    application.plugin.handle = dlopen(application.args.inputs[0], RTLD_NOW | RTLD_LOCAL);
-    if (application.plugin.handle == NULL)
+    if (!application.plugin.built_in)
     {
-        ERROR_("couldn't load plugin " COLOR_STRING "%s" COLOR_RESET
-                " (%s)", application.args.inputs[0], dlerror());
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-    AT_EXIT(exit_unload_plugin);
-
-    /////////////////////////
-    // Check plugin format //
-    /////////////////////////
-
-    application.plugin.format = dlsym(application.plugin.handle,
-            STRINGIFY(STATION_PLUGIN_FORMAT_OBJECT));
-    if (application.plugin.format == NULL)
-    {
-        ERROR("couldn't obtain plugin format");
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-
-    if (application.plugin.format->signature != STATION_PLUGIN_SIGNATURE)
-    {
-        ERROR_("plugin signature (" COLOR_VERSION "0x%X" COLOR_RESET
-                ") is wrong (must be " COLOR_VERSION "0x%X" COLOR_RESET ")",
-                application.plugin.format->signature, STATION_PLUGIN_SIGNATURE);
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-
-    if (application.plugin.format->version != STATION_PLUGIN_VERSION)
-    {
-        ERROR_("plugin version (" COLOR_VERSION "%u" COLOR_RESET
-                ") is different from application version (" COLOR_VERSION "%u" COLOR_RESET ")",
-                application.plugin.format->version, STATION_PLUGIN_VERSION);
-        exit(STATION_APP_ERROR_PLUGIN);
+        application.plugin.handle = dlopen(application.args.inputs[0], RTLD_NOW | RTLD_LOCAL);
+        if (application.plugin.handle == NULL)
+        {
+            ERROR_("couldn't load plugin " COLOR_STRING "%s" COLOR_RESET
+                    " (%s)", application.args.inputs[0], dlerror());
+            exit(STATION_APP_ERROR_PLUGIN);
+        }
+        AT_EXIT(exit_unload_plugin);
     }
 
     //////////////////////////
     // Obtain plugin vtable //
     //////////////////////////
 
-    application.plugin.vtable = dlsym(application.plugin.handle,
-            STRINGIFY(STATION_PLUGIN_VTABLE_OBJECT));
-    if (application.plugin.vtable == NULL)
+    if (!application.plugin.built_in)
     {
-        ERROR("couldn't obtain plugin vtable");
+        application.plugin.vtable = dlsym(application.plugin.handle,
+                STRINGIFY(STATION_PLUGIN_VTABLE_OBJECT));
+        if (application.plugin.vtable == NULL)
+        {
+            ERROR("couldn't obtain plugin vtable");
+            exit(STATION_APP_ERROR_PLUGIN);
+        }
+    }
+
+    /////////////////////////
+    // Check plugin format //
+    /////////////////////////
+
+    if (application.plugin.vtable->format.magic != STATION_PLUGIN_MAGIC)
+    {
+        ERROR_("plugin magic number (" COLOR_VERSION "0x%X" COLOR_RESET
+                ") is wrong (must be " COLOR_VERSION "0x%X" COLOR_RESET ")",
+                application.plugin.vtable->format.magic, STATION_PLUGIN_MAGIC);
         exit(STATION_APP_ERROR_PLUGIN);
     }
 
-    if ((application.plugin.vtable->name == NULL) ||
-            (application.plugin.vtable->help_fn == NULL) ||
-            (application.plugin.vtable->conf_fn == NULL) ||
-            (application.plugin.vtable->init_fn == NULL) ||
-            (application.plugin.vtable->final_fn == NULL))
+    if (application.plugin.vtable->format.version != STATION_PLUGIN_VERSION)
     {
-        ERROR("plugin vtable contains NULL pointers");
+        ERROR_("plugin version (" COLOR_VERSION "%u" COLOR_RESET
+                ") is different from application version (" COLOR_VERSION "%u" COLOR_RESET ")",
+                application.plugin.vtable->format.version, STATION_PLUGIN_VERSION);
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
+
+    if ((application.plugin.vtable->func.help == NULL) ||
+            (application.plugin.vtable->func.conf == NULL) ||
+            (application.plugin.vtable->func.init == NULL) ||
+            (application.plugin.vtable->func.final == NULL))
+    {
+        ERROR("plugin vtable contains NULL function pointers");
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
+
+    if (application.plugin.vtable->info.name == NULL)
+    {
+        ERROR("plugin name string is NULL");
         exit(STATION_APP_ERROR_PLUGIN);
     }
 
     if (application.verbose)
         PRINT_("Plugin name: " COLOR_STRING "%s" COLOR_RESET "\n\n",
-                application.plugin.vtable->name);
+                application.plugin.vtable->info.name);
 
     ///////////////////////////////
     // Display plugin usage help //
@@ -694,7 +741,7 @@ static void initialize(int argc, char *argv[])
             AT_QUICK_EXIT(exit_end_plugin_help_fn_output);
         }
 
-        application.plugin.vtable->help_fn(application.plugin.argc, application.plugin.argv);
+        application.plugin.vtable->func.help(application.plugin.argc, application.plugin.argv);
 
         if (application.verbose)
             exit_end_plugin_help_fn_output();
@@ -718,7 +765,7 @@ static void initialize(int argc, char *argv[])
         AT_QUICK_EXIT(exit_end_plugin_conf_fn_output);
     }
 
-    application.plugin.vtable->conf_fn(&application.plugin.configuration,
+    application.plugin.vtable->func.conf(&application.plugin.configuration,
             application.plugin.argc, application.plugin.argv);
 
     if (application.verbose)
@@ -817,7 +864,7 @@ static void initialize(int argc, char *argv[])
                     (unsigned long)application.concurrent_processing.contexts.num_contexts);
 
             if (application.args.threads_given > application.concurrent_processing.contexts.num_contexts)
-                PRINT_(" (" COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
                         (unsigned long)(application.args.threads_given -
                             application.concurrent_processing.contexts.num_contexts));
 
@@ -827,12 +874,16 @@ static void initialize(int argc, char *argv[])
             {
                 PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: ", i);
 
-                if (application.args.threads_arg[i] >= 0)
-                    PRINT_(COLOR_NUMBER "%i" COLOR_RESET " threads (waiting on condition variable)\n",
-                            application.args.threads_arg[i]);
+                int threads = application.args.threads_arg[i];
+
+                if (threads > 0)
+                    PRINT_(COLOR_NUMBER "%i" COLOR_RESET " thread%s (waiting on condition variable)\n",
+                            threads, threads > 1 ? "s" : "");
+                else if (threads < 0)
+                    PRINT_(COLOR_NUMBER "%i" COLOR_RESET " thread%s (busy waiting)\n",
+                            -threads, -threads > 1 ? "s" : "");
                 else
-                    PRINT_(COLOR_NUMBER "%i" COLOR_RESET " threads (busy waiting)\n",
-                            -application.args.threads_arg[i]);
+                    PRINT("no threads\n");
             }
         }
 
@@ -843,7 +894,7 @@ static void initialize(int argc, char *argv[])
                     (unsigned long)application.opencl.contexts.num_contexts);
 
             if (application.args.cl_context_given > application.opencl.contexts.num_contexts)
-                PRINT_(" (" COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
                         (unsigned long)(application.args.cl_context_given - application.opencl.contexts.num_contexts));
 
             PRINT("\n");
@@ -905,7 +956,7 @@ static void initialize(int argc, char *argv[])
             PRINT_("Files: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.files.num_buffers);
 
             if (application.args.file_given > application.files.num_buffers)
-                PRINT_(" (" COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
                         (unsigned long)(application.args.file_given - application.files.num_buffers));
 
             PRINT("\n");
@@ -1156,7 +1207,7 @@ static int run(void)
             AT_QUICK_EXIT(exit_end_plugin_init_fn_output);
         }
 
-        application.plugin.vtable->init_fn(&plugin_init_func_inputs, &plugin_init_func_outputs);
+        application.plugin.vtable->func.init(&plugin_init_func_inputs, &plugin_init_func_outputs);
 
         if (application.verbose)
             exit_end_plugin_init_fn_output();
@@ -1211,7 +1262,7 @@ static int finalize(bool quick)
         fflush(stderr);
     }
 
-    int exit_code = application.plugin.vtable->final_fn(application.plugin.resources, quick);
+    int exit_code = application.plugin.vtable->func.final(application.plugin.resources, quick);
 
     if (application.verbose)
     {

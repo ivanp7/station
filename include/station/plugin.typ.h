@@ -141,21 +141,27 @@ typedef int (*station_plugin_final_func_t)(
  * @brief Plugin format.
  */
 typedef struct station_plugin_format {
-    uint32_t signature; ///< Value uniquely identifying plugin format.
-    uint32_t version;   ///< Value determining application-plugin compatibility.
+    uint32_t magic;   ///< Value uniquely identifying plugin format.
+    uint32_t version; ///< Value determining application-plugin compatibility.
 } station_plugin_format_t;
 
 /**
  * @brief Plugin vtable.
  */
 typedef struct station_plugin_vtable {
-    const char *name; ///< Plugin name.
+    station_plugin_format_t format; ///< Plugin format.
 
-    station_plugin_help_func_t help_fn;   ///< Pointer to plugin help function.
+    struct {
+        station_plugin_help_func_t help;   ///< Pointer to plugin help function.
 
-    station_plugin_conf_func_t conf_fn;   ///< Pointer to plugin configuration function.
-    station_plugin_init_func_t init_fn;   ///< Pointer to plugin initialization function.
-    station_plugin_final_func_t final_fn; ///< Pointer to plugin finalization function.
+        station_plugin_conf_func_t conf;   ///< Pointer to plugin configuration function.
+        station_plugin_init_func_t init;   ///< Pointer to plugin initialization function.
+        station_plugin_final_func_t final; ///< Pointer to plugin finalization function.
+    } func;
+
+    struct {
+        const char *name; ///< Plugin name.
+    } info;
 } station_plugin_vtable_t;
 
 #endif // _STATION_PLUGIN_TYP_H_

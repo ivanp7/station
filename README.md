@@ -47,6 +47,8 @@ This function allows the plugin to destroy its own resources.
 
 8. Application resources are released by the application.
 
+## User plugin
+
 The user plugin interface is defined in `plugin.*.h`.
 A plugin must implement 4 functions:
 
@@ -59,6 +61,9 @@ and also to parse command line arguments for the plugin.
 the initial finite state machine state.
 
 4. `final()`: used to destroy the plugin's own resources, and set the application exit code.
+
+It is possible to link `station-app` with a user plugin,
+so that the latter becomes a standalone application.
 
 ## Contents of `station-app --help`
 
@@ -112,12 +117,13 @@ Signal management:
 ## How to build
 
 The project is built using the Ninja build system.
-
 A `build.ninja` file is generated using `configure` script.
-
 To see the possible build configuration options, run `configure` without arguments.
-
 To generate `build.ninja`, run `configure <options>`.
+To build, run `ninja`.
+
+The configuration script also generates `station.pc` (pkg-config file for `libstation`)
+and `station-app.pc` (pkg-config file for standalone executable user plugins).
 
 ## Build dependencies
 
@@ -143,7 +149,7 @@ A quick and dirty demo plugin can be found in the `demo` subdirectory.
 
 List of projects using Station:
 
-* [still-alive](https://github.com/ivanp7/still-alive)
+* [still-alive](https://github.com/ivanp7/still-alive) (built as an application with built-in plugin)
 
 ## Documentation
 

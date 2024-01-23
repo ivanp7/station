@@ -16,16 +16,19 @@ ODIR="build"
 
 FILE_LIBRARY="library"
 FILE_APPLICATION="application"
-FILE_APPLICATION_GGO="application.ggo"
+FILE_APPLICATION_ENTRY="application_entry"
 
+FILE_APPLICATION_GGO="application.ggo"
 FILE_APPLICATION_ARGS="application_args"
 GGO_FUNC_PREFIX="args_parser"
 
 OUT_LIBRARY_STATIC="lib${PROJECT_NAME}.a"
 OUT_LIBRARY_SHARED="lib${PROJECT_NAME}.so"
+OUT_APPLICATION_LIB="lib${PROJECT_NAME}-app.a"
 OUT_APPLICATION="${PROJECT_NAME}-app"
 
 PKG_CONF="${PROJECT_NAME}.pc"
+PKG_CONF_APP="${PROJECT_NAME}-app.pc"
 NINJA="build.ninja"
 
 : ${CC:="gcc"}
@@ -139,7 +142,7 @@ ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"
 LFLAGS="$LFLAGS_COMMON"
 
 ###############################################################################
-# Generate pkg-config file
+# Generate pkg-config files
 ###############################################################################
 
 cat <<  _EOF_ > "${PROJECT_DIR}/${PKG_CONF}"
@@ -155,6 +158,14 @@ then
 else
     echo "Libs: $LFLAGS_COMMON -Wl,--whole-archive ${INSTALL_LDIR}/${OUT_LIBRARY_STATIC} -Wl,--no-whole-archive" >> "${PROJECT_DIR}/${PKG_CONF}"
 fi
+
+cat <<  _EOF_ > "${PROJECT_DIR}/${PKG_CONF_APP}"
+Name: ${PROJECT_NAME}
+Description: ${PROJECT_DESCRIPTION}
+Version: ${PROJECT_VERSION}
+Cflags: $CFLAGS_COMMON $INSTALL_IFLAGS
+Libs: $LFLAGS_COMMON -Wl,--whole-archive ${INSTALL_LDIR}/${OUT_APPLICATION_LIB} -Wl,--no-whole-archive
+_EOF_
 
 ###############################################################################
 # Generate build.ninja
@@ -222,9 +233,16 @@ build ${ODIR}/${FILE_APPLICATION_ARGS}.o: cc ${ODIR}/${FILE_APPLICATION_ARGS}.c
 build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o
+build ${ODIR}/${FILE_APPLICATION_ENTRY}.o: cc ${SDIR}/${FILE_APPLICATION_ENTRY}.c
     cflags_custom = \$cflags_app
 
+build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o
+    cflags_custom = \$cflags_app
+
+build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
+    cflags_custom = \$cflags_app
+
+build application-lib: phony ${ODIR}/${OUT_APPLICATION_LIB}
 build application: phony ${ODIR}/${OUT_APPLICATION}
 
 
@@ -233,6 +251,8 @@ _EOF_
 
 if [ "${OUTPUT_APPLICATION:-}" ]
 then
-    echo "default application" >> "${PROJECT_DIR}/${NINJA}"
+cat <<  _EOF_ >> "${PROJECT_DIR}/${NINJA}"
+default application-lib application
+_EOF_
 fi
 

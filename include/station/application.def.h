@@ -26,17 +26,28 @@
 #ifndef _STATION_APPLICATION_DEF_H_
 #define _STATION_APPLICATION_DEF_H_
 
+/**
+ * @brief Application error exit code base.
+ */
 #define STATION_APP_ERROR_BASE 64
 
-#define STATION_APP_ERROR_ATEXIT        (STATION_APP_ERROR_BASE + 1)
-#define STATION_APP_ERROR_ARGUMENTS     (STATION_APP_ERROR_BASE + 2)
-#define STATION_APP_ERROR_PLUGIN        (STATION_APP_ERROR_BASE + 3)
-#define STATION_APP_ERROR_MALLOC        (STATION_APP_ERROR_BASE + 4)
-#define STATION_APP_ERROR_FILE          (STATION_APP_ERROR_BASE + 5)
-#define STATION_APP_ERROR_SIGNAL        (STATION_APP_ERROR_BASE + 6)
-#define STATION_APP_ERROR_THREADS       (STATION_APP_ERROR_BASE + 7)
-#define STATION_APP_ERROR_OPENCL        (STATION_APP_ERROR_BASE + 8)
-#define STATION_APP_ERROR_SDL           (STATION_APP_ERROR_BASE + 9)
+#define STATION_APP_ERROR_ATEXIT        (STATION_APP_ERROR_BASE + 1) ///< Error: atexit() or at_quick_exit() failed.
+#define STATION_APP_ERROR_ARGUMENTS     (STATION_APP_ERROR_BASE + 2) ///< Error: incorrect command line arguments.
+#define STATION_APP_ERROR_PLUGIN        (STATION_APP_ERROR_BASE + 3) ///< Error: couldn't load plugin.
+#define STATION_APP_ERROR_MALLOC        (STATION_APP_ERROR_BASE + 4) ///< Error: malloc() failed.
+#define STATION_APP_ERROR_FILE          (STATION_APP_ERROR_BASE + 5) ///< Error: couldn't read file.
+#define STATION_APP_ERROR_SIGNAL        (STATION_APP_ERROR_BASE + 6) ///< Error: couldn't configure signal management.
+#define STATION_APP_ERROR_THREADS       (STATION_APP_ERROR_BASE + 7) ///< Error: couldn't create concurrent processing context.
+#define STATION_APP_ERROR_OPENCL        (STATION_APP_ERROR_BASE + 8) ///< Error: couldn't create OpenCL context.
+#define STATION_APP_ERROR_SDL           (STATION_APP_ERROR_BASE + 9) ///< Error: couldn't initialize SDL subsystems.
+
+/**
+ * @brief Define standalone plugin entry point.
+ */
+#define STATION_APP_PLUGIN_MAIN()                   \
+    int main(int argc, char *argv[]) {              \
+        return station_app_main(argc, argv,         \
+                &STATION_PLUGIN_VTABLE_OBJECT); }
 
 #endif // _STATION_APPLICATION_DEF_H_
 

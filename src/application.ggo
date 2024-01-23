@@ -2,14 +2,8 @@ package "station-app"
 version "1.0"
 versiontext "Copyright (C) 2024 by Ivan Podmazov"
 
-usage "
+usage ""
 
-station-app [options...] PLUGIN_FILE [-- [plugin options...]]
-    or
-station-app --help [PLUGIN_FILE [-- [plugin help options...]]]
-    or
-station-app --cl-list[=TYPE]
-"
 
 args "--conf-parser --default-optional --no-handle-error --no-help --no-version --unnamed-opts=PLUGIN_FILE"
 

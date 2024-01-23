@@ -464,11 +464,11 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_res
 }
 
 // Define the plugin
-STATION_PLUGIN("Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final)
+STATION_PLUGIN("Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final);
 
 ///////////////////////////////////////////////////////////////////////
 
-// Make the plugin executable without station-app because we can
+// Make the plugin shared library executable because we can
 #ifdef __GNUC__
 
 void plugin_main(void);

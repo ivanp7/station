@@ -27,18 +27,14 @@
 #define _STATION_PLUGIN_DEF_H_
 
 /**
- * @brief Plugin signature - value uniquely identifying plugin format.
+ * @brief Plugin magic number - value uniquely identifying plugin format.
  */
-#define STATION_PLUGIN_SIGNATURE 0xfeedDEAD
+#define STATION_PLUGIN_MAGIC 0x4E747453 // "SttN" in little endian
 /**
  * @brief Plugin version - value determining application-plugin compatibility.
  */
-#define STATION_PLUGIN_VERSION 20240115
+#define STATION_PLUGIN_VERSION 20240123
 
-/**
- * @brief Name of plugin format structure object.
- */
-#define STATION_PLUGIN_FORMAT_OBJECT station_plugin_format_object
 /**
  * @brief Name of plugin vtable structure object.
  */
@@ -81,13 +77,12 @@
  * @brief Define plugin objects.
  */
 #define STATION_PLUGIN(plugin_name, plugin_help, plugin_conf, plugin_init, plugin_final) \
-    station_plugin_format_t STATION_PLUGIN_FORMAT_OBJECT = {    \
-        .signature = STATION_PLUGIN_SIGNATURE,                  \
-        .version = STATION_PLUGIN_VERSION};                     \
     station_plugin_vtable_t STATION_PLUGIN_VTABLE_OBJECT = {    \
-        .name = plugin_name, .help_fn = plugin_help,            \
-        .conf_fn = plugin_conf, .init_fn = plugin_init,         \
-        .final_fn = plugin_final};
+        .format = {.magic = STATION_PLUGIN_MAGIC,               \
+            .version = STATION_PLUGIN_VERSION},                 \
+        .func = {.help = plugin_help, .conf = plugin_conf,      \
+            .init = plugin_init, .final = plugin_final},        \
+        .info = {.name = plugin_name}}
 
 #endif // _STATION_PLUGIN_DEF_H_
 
