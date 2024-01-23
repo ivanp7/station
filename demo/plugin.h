@@ -18,6 +18,7 @@
 // Parameters for concurrent execution of pfunc_inc() and pfunc_dec()
 #define NUM_TASKS 1024
 #define BATCH_SIZE 16 // number of tasks each thread does at once
+#define NUM_ITERATIONS (128*128)
 
 #define ALARM_DELAY 5 // argument for alarm()
 
@@ -69,7 +70,6 @@ static STATION_PFUNC(pfunc_draw);
 
 // State functions for the finite state machine
 static STATION_SFUNC(sfunc_pre);
-static STATION_SFUNC(sfunc_post);
 
 static STATION_SFUNC(sfunc_loop);
 

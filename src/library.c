@@ -133,6 +133,19 @@ station_clear_buffer(
 
 #ifndef STATION_NO_CONCURRENT_PROCESSING
 
+struct station_concurrent_processing_assignment {
+    station_pfunc_t pfunc;
+    void *pfunc_data;
+
+    station_pfunc_callback_t callback;
+    void *callback_data;
+
+    station_tasks_number_t num_tasks;
+    station_tasks_number_t batch_size;
+
+    bool use_pong_cnd;
+};
+
 struct station_concurrent_processing_threads_state {
     struct {
         station_threads_number_t num_threads;
@@ -156,17 +169,7 @@ struct station_concurrent_processing_threads_state {
     bool terminate;
 
     struct {
-        station_pfunc_t pfunc;
-        void *pfunc_data;
-
-        station_pfunc_callback_t callback;
-        void *callback_data;
-
-        station_tasks_number_t num_tasks;
-        station_tasks_number_t batch_size;
-
-        bool use_pong_cnd;
-
+        struct station_concurrent_processing_assignment assignment;
         atomic_uint done_tasks;
         atomic_ushort thread_counter;
     } current;
@@ -195,18 +198,9 @@ station_concurrent_processing_thread(
     }
 
     station_threads_number_t thread_counter_last = threads_state->persistent.num_threads - 1;
-
     bool use_ping_cnd = threads_state->persistent.use_ping_cnd;
-    bool use_pong_cnd;
 
-    station_pfunc_t pfunc;
-    void *pfunc_data;
-
-    station_pfunc_callback_t callback;
-    void *callback_data;
-
-    station_tasks_number_t num_tasks;
-    station_tasks_number_t batch_size;
+    struct station_concurrent_processing_assignment assignment;
 
     bool ping_sense = false, pong_sense = false;
 
@@ -251,27 +245,19 @@ station_concurrent_processing_thread(
         if (threads_state->terminate)
             break;
 
-        pfunc = threads_state->current.pfunc;
-        pfunc_data = threads_state->current.pfunc_data;
-
-        callback = threads_state->current.callback;
-        callback_data = threads_state->current.callback_data;
-
-        num_tasks = threads_state->current.num_tasks;
-        batch_size = threads_state->current.batch_size;
-
-        use_pong_cnd = threads_state->current.use_pong_cnd;
+        // Copy the assignment
+        assignment = threads_state->current.assignment;
 
         // Acquire first task
         station_task_idx_t task_idx = atomic_fetch_add_explicit(
-                &threads_state->current.done_tasks, batch_size, memory_order_relaxed);
-        station_tasks_number_t remaining_tasks = batch_size;
+                &threads_state->current.done_tasks, assignment.batch_size, memory_order_relaxed);
+        station_tasks_number_t remaining_tasks = assignment.batch_size;
 
         // Loop until no subtasks left
-        while (task_idx < num_tasks)
+        while (task_idx < assignment.num_tasks)
         {
             // Execute concurrent processing function
-            pfunc(pfunc_data, task_idx, thread_idx);
+            assignment.pfunc(assignment.pfunc_data, task_idx, thread_idx);
             remaining_tasks--;
 
             // Acquire next task
@@ -280,8 +266,8 @@ station_concurrent_processing_thread(
             else
             {
                 task_idx = atomic_fetch_add_explicit(
-                        &threads_state->current.done_tasks, batch_size, memory_order_relaxed);
-                remaining_tasks = batch_size;
+                        &threads_state->current.done_tasks, assignment.batch_size, memory_order_relaxed);
+                remaining_tasks = assignment.batch_size;
             }
         }
 
@@ -293,9 +279,9 @@ station_concurrent_processing_thread(
             atomic_store_explicit(&threads_state->persistent.pong_flag,
                     pong_sense, memory_order_release);
 
-            if (callback != NULL)
-                callback(callback_data, thread_idx);
-            else if (use_pong_cnd)
+            if (assignment.callback != NULL)
+                assignment.callback(assignment.callback_data, thread_idx);
+            else if (assignment.use_pong_cnd)
             {
                 {
 #ifndef NDEBUG
@@ -613,20 +599,18 @@ station_concurrent_processing_execute(
                     memory_order_acquire))
             return false;
 
+        // Set the assignment
         if (batch_size == 0) // automatic batch size
             batch_size = (num_tasks - 1) / context->state->persistent.num_threads + 1;
 
-        context->state->current.pfunc = pfunc;
-        context->state->current.pfunc_data = pfunc_data;
+        context->state->current.assignment = (struct station_concurrent_processing_assignment){
+            .pfunc = pfunc, .pfunc_data = pfunc_data,
+            .callback = callback, .callback_data = callback_data,
+            .num_tasks = num_tasks, .batch_size = batch_size,
+            .use_pong_cnd = !busy_wait,
+        };
 
-        context->state->current.callback = callback;
-        context->state->current.callback_data = callback_data;
-
-        context->state->current.num_tasks = num_tasks;
-        context->state->current.batch_size = batch_size;
-
-        context->state->current.use_pong_cnd = !busy_wait;
-
+        // Initialize counters and flags
         context->state->current.done_tasks = 0;
         context->state->current.thread_counter = 0;
 
@@ -659,7 +643,7 @@ station_concurrent_processing_execute(
 
         if (callback == NULL)
         {
-            if (context->state->current.use_pong_cnd)
+            if (context->state->current.assignment.use_pong_cnd)
             {
 #ifndef NDEBUG
                 int res =
@@ -672,7 +656,7 @@ station_concurrent_processing_execute(
             while (atomic_load_explicit(&context->state->persistent.pong_flag,
                         memory_order_acquire) != pong_sense)
             {
-                if (context->state->current.use_pong_cnd)
+                if (context->state->current.assignment.use_pong_cnd)
                 {
 #ifndef NDEBUG
                     int res =
@@ -683,7 +667,7 @@ station_concurrent_processing_execute(
                 }
             }
 
-            if (context->state->current.use_pong_cnd)
+            if (context->state->current.assignment.use_pong_cnd)
             {
 #ifndef NDEBUG
                 int res =

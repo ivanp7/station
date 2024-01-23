@@ -21,8 +21,6 @@ static STATION_PFUNC_CALLBACK(pfunc_cb_flag) // implicit arguments: data, thread
 {
     (void) thread_idx;
 
-    printf("pfunc_cb_flag()\n");
-
     atomic_bool *flag = data;
     *flag = true;
 }
@@ -87,53 +85,59 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
     if (resources->concurrent_processing_context != NULL)
     {
         atomic_bool flag = false;
+        bool result;
 
-        // Increment the counter to check if all task indices were processed
-        station_concurrent_processing_execute(resources->concurrent_processing_context,
-                NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag, false); // non-blocking call
-
-        // Busy-wait until done
-        while (!flag);
-
-        // Sum of [0; N-1] is N*(N-1)/2
-        if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+        // Stress test of concurrent processing
+        for (unsigned i = 0; i < NUM_ITERATIONS; i++)
         {
-            printf("counter has incorrect value\n");
-            exit(1);
+            if ((i+1) % 1024 == 0)
+                printf("%u\n", i);
+
+            // Increment the counter to check if all task indices were processed
+            do
+            {
+                result = station_concurrent_processing_execute(resources->concurrent_processing_context,
+                        NUM_TASKS, BATCH_SIZE, pfunc_inc, resources,
+                        pfunc_cb_flag, &flag, false); // non-blocking call
+                        /* NULL, &flag, false); // blocking call */
+            }
+            while (!result);
+
+            // Busy-wait until done
+            while (!flag);
+            flag = false;
+
+            // Sum of [0; N-1] is N*(N-1)/2
+            if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+            {
+                printf("counter has incorrect value\n");
+                exit(1);
+            }
+
+            // Decrement the counter back to zero to become twice as sure
+            do
+            {
+                result = station_concurrent_processing_execute(resources->concurrent_processing_context,
+                        NUM_TASKS, BATCH_SIZE, pfunc_dec, resources,
+                        pfunc_cb_flag, &flag, false); // non-blocking call
+                        /* NULL, &flag, false); // blocking call */
+            }
+            while (!result);
+
+            // Busy-wait until done
+            while (!flag);
+            flag = false;
+
+            // Counter must be equal to zero again
+            if (resources->counter != 0)
+            {
+                printf("counter is not 0\n");
+                exit(1);
+            }
         }
     }
 
     state->sfunc = sfunc_loop;
-}
-
-// State function for the finite state machine
-static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
-{
-    printf("sfunc_post()\n");
-
-    struct plugin_resources *resources = fsm_data;
-
-    if (resources->concurrent_processing_context != NULL)
-    {
-        atomic_bool flag = false;
-
-        // Decrement the counter back to zero to become twice as sure
-        station_concurrent_processing_execute(resources->concurrent_processing_context,
-                NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag, false); // non-blocking call
-
-        // Busy-wait until done
-        while (!flag);
-
-        // Counter must be equal to zero again
-        if (resources->counter != 0)
-        {
-            printf("counter has incorrect value\n");
-            exit(1);
-        }
-    }
-
-    // Stop the finite state machine and shut down the application
-    state->sfunc = NULL;
 }
 
 // State function for the finite state machine
@@ -147,7 +151,7 @@ static STATION_SFUNC(sfunc_loop) // implicit arguments: state, fsm_data
     {
         printf("Caught SIGINT, bye!\n");
         // Exit normally
-        state->sfunc = sfunc_post;
+        state->sfunc = NULL;
         return;
     }
     else if (STATION_SIGNAL_IS_FLAG_SET(&signals->signal_SIGQUIT))
@@ -218,14 +222,13 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
             if (resources->event.type == SDL_QUIT)
             {
                 printf("Window is closed, bye!\n");
-                state->sfunc = sfunc_post;
-                return;
+                exit(EXIT_SUCCESS);
             }
             else if ((resources->event.type == SDL_KEYDOWN) &&
                     (resources->event.key.keysym.sym == SDLK_ESCAPE))
             {
                 printf("Escape is pressed, bye!\n");
-                state->sfunc = sfunc_post;
+                state->sfunc = NULL;
                 return;
             }
             else if ((resources->event.type == SDL_KEYDOWN) &&
@@ -242,8 +245,7 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
                         true, 0, 0, 0, 0) != 0) // whole texture
             {
                 printf("station_sdl_window_lock_texture() failure\n");
-                state->sfunc = sfunc_post;
-                return;
+                exit(EXIT_FAILURE);
             }
 
             // step 2: update texture pixels by calling pfunc_draw() from multiple threads
@@ -312,8 +314,7 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
             if (station_sdl_window_unlock_texture_and_render(&resources->sdl_window) != 0)
             {
                 printf("station_sdl_window_unlock_texture_and_render() failure\n");
-                state->sfunc = sfunc_post;
-                return;
+                exit(EXIT_FAILURE);
             }
         }
     }
