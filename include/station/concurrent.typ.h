@@ -27,8 +27,8 @@
 #define _STATION_CONCURRENT_TYP_H_
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 struct station_concurrent_processing_threads_state;
 

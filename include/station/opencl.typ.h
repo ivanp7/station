@@ -40,10 +40,10 @@ typedef struct station_opencl_contexts_array {
         cl_platform_id platform_id; ///< OpenCL platform identifier.
         cl_device_id *device_ids;   ///< Array of OpenCL device identifiers.
         cl_uint num_devices;        ///< Number of utilized OpenCL devices on the platform.
-    } *platforms;
-    cl_uint num_platforms; ///< Number of OpenCL platforms with initialized contexts.
+    } *context_info;
+    cl_uint num_contexts; ///< Number of OpenCL platforms with initialized contexts.
 #else
-    unsigned int num_platforms; // must be zero
+    unsigned int num_contexts; // must be zero
 #endif
 } station_opencl_contexts_array_t;
 

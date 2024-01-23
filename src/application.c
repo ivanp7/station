@@ -233,7 +233,6 @@ static void initialize(int argc, char *argv[]);
 
 static void exit_release_args(void);
 static void exit_unload_plugin(void);
-static void exit_destroy_buffers(void);
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 static void exit_stop_signal_management_thread(void);
@@ -244,6 +243,8 @@ static void exit_stop_threads(void);
 #ifdef STATION_IS_SDL_SUPPORTED
 static void exit_quit_sdl(void);
 #endif
+
+static void exit_destroy_buffers(void);
 
 static void exit_end_plugin_help_fn_output(void);
 static void exit_end_plugin_conf_fn_output(void);
@@ -705,7 +706,7 @@ static void initialize(int argc, char *argv[])
     // Call plugin configuration function //
     ////////////////////////////////////////
 
-    application.plugin.configuration.signals = &application.signal.set;
+    application.plugin.configuration.signals_used = &application.signal.set;
 
     if (application.verbose)
     {
@@ -752,16 +753,30 @@ static void initialize(int argc, char *argv[])
     application.signal.management_used = false;
 #endif
 
-#ifndef STATION_IS_OPENCL_SUPPORTED
-    application.plugin.configuration.opencl_is_used = false;
+    application.concurrent_processing.contexts.num_contexts =
+        application.plugin.configuration.num_concurrent_processing_contexts_used;
+    if (application.concurrent_processing.contexts.num_contexts > application.args.threads_given)
+        application.concurrent_processing.contexts.num_contexts = application.args.threads_given;
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+    application.opencl.contexts.num_contexts =
+        application.plugin.configuration.num_opencl_contexts_used;
+    if (application.opencl.contexts.num_contexts > application.args.cl_context_given)
+        application.opencl.contexts.num_contexts = application.args.cl_context_given;
+#else
+    application.plugin.configuration.num_opencl_contexts_used = 0;
 #endif
 
-#ifndef STATION_IS_SDL_SUPPORTED
-    application.plugin.configuration.sdl_is_used = false;
-#else
+#ifdef STATION_IS_SDL_SUPPORTED
     if (application.args.no_sdl_given)
         application.plugin.configuration.sdl_is_used = false;
+#else
+    application.plugin.configuration.sdl_is_used = false;
 #endif
+
+    application.files.num_buffers = application.plugin.configuration.num_files_used;
+    if (application.files.num_buffers > application.args.file_given)
+        application.files.num_buffers = application.args.file_given;
 
     ///////////////////////////////////////
     // Display application configuration //
@@ -796,13 +811,19 @@ static void initialize(int argc, char *argv[])
             PRINT("\n");
         }
 
-        if (application.plugin.configuration.concurrent_processing_is_used &&
-                (application.args.threads_given > 0))
+        if ((application.concurrent_processing.contexts.num_contexts > 0) || (application.args.threads_given > 0))
         {
-            PRINT_("Concurrent processing contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
-                    application.args.threads_given);
+            PRINT_("Concurrent processing contexts: " COLOR_NUMBER "%lu" COLOR_RESET,
+                    (unsigned long)application.concurrent_processing.contexts.num_contexts);
 
-            for (unsigned i = 0; i < application.args.threads_given; i++)
+            if (application.args.threads_given > application.concurrent_processing.contexts.num_contexts)
+                PRINT_(" (" COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                        (unsigned long)(application.args.threads_given -
+                            application.concurrent_processing.contexts.num_contexts));
+
+            PRINT("\n");
+
+            for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
             {
                 PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: ", i);
 
@@ -816,13 +837,18 @@ static void initialize(int argc, char *argv[])
         }
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-        if (application.plugin.configuration.opencl_is_used &&
-                (application.args.cl_context_given > 0))
+        if ((application.opencl.contexts.num_contexts > 0) || (application.args.cl_context_given > 0))
         {
-            PRINT_("OpenCL contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
-                    application.args.cl_context_given);
+            PRINT_("OpenCL contexts: " COLOR_NUMBER "%lu" COLOR_RESET,
+                    (unsigned long)application.opencl.contexts.num_contexts);
 
-            for (unsigned i = 0; i < application.args.cl_context_given; i++)
+            if (application.args.cl_context_given > application.opencl.contexts.num_contexts)
+                PRINT_(" (" COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                        (unsigned long)(application.args.cl_context_given - application.opencl.contexts.num_contexts));
+
+            PRINT("\n");
+
+            for (unsigned i = 0; i < application.opencl.contexts.num_contexts; i++)
             {
                 cl_uint platform_idx = strtoul(
                         application.args.cl_context_arg[i], (char**)NULL, 16);
@@ -874,55 +900,22 @@ static void initialize(int argc, char *argv[])
         }
 #endif
 
-        if (application.plugin.configuration.files_are_used &&
-                (application.args.file_given > 0))
+        if ((application.files.num_buffers > 0) || (application.args.file_given > 0))
         {
-            PRINT_("Files: " COLOR_NUMBER "%u" COLOR_RESET "\n", application.args.file_given);
+            PRINT_("Files: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.files.num_buffers);
 
-            for (unsigned i = 0; i < application.args.file_given; i++)
+            if (application.args.file_given > application.files.num_buffers)
+                PRINT_(" (" COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                        (unsigned long)(application.args.file_given - application.files.num_buffers));
+
+            PRINT("\n");
+
+            for (unsigned i = 0; i < application.files.num_buffers; i++)
                 PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n", i, application.args.file_arg[i]);
         }
 
         PRINT("\n");
-    }
-
-    ///////////////////////////////
-    // Create buffers from files //
-    ///////////////////////////////
-
-    if ((application.plugin.configuration.files_are_used) &&
-            (application.args.file_given > 0))
-    {
-        application.files.num_buffers = application.args.file_given;
-
-        application.files.buffers = malloc(
-                sizeof(*application.files.buffers) * application.files.num_buffers);
-        if (application.files.buffers == NULL)
-        {
-            ERROR("couldn't allocate array of file buffers");
-            exit(STATION_APP_ERROR_MALLOC);
-        }
-
-        for (unsigned i = 0; i < application.files.num_buffers; i++)
-            application.files.buffers[i] = (station_buffer_t){0};
-
-        AT_EXIT(exit_destroy_buffers);
-
-        for (unsigned i = 0; i < application.files.num_buffers; i++)
-        {
-            bool success = station_fill_buffer_from_file(
-                    &application.files.buffers[i], application.args.file_arg[i]);
-
-            if (!success)
-            {
-                ERROR_("couldn't create buffer from file #"
-                        COLOR_NUMBER "%u" COLOR_RESET " '"
-                        COLOR_STRING "%s" COLOR_RESET "'\n",
-                        i, application.args.file_arg[i]);
-                exit(STATION_APP_ERROR_FILE);
-            }
-        }
     }
 
     ////////////////////////////////////
@@ -948,15 +941,12 @@ static void initialize(int argc, char *argv[])
     application.signal.set = (station_signal_set_t){0};
 #endif
 
-    ////////////////////////////////////////
+    //////////////////////////////////////////
     // Create concurrent processing threads //
-    ////////////////////////////////////////
+    //////////////////////////////////////////
 
-    if ((application.plugin.configuration.concurrent_processing_is_used) &&
-            (application.args.threads_given > 0))
+    if (application.concurrent_processing.contexts.num_contexts > 0)
     {
-        application.concurrent_processing.contexts.num_contexts = application.args.threads_given;
-
         application.concurrent_processing.contexts.contexts = malloc(
                 sizeof(*application.concurrent_processing.contexts.contexts) *
                 application.concurrent_processing.contexts.num_contexts);
@@ -1007,8 +997,7 @@ static void initialize(int argc, char *argv[])
     ////////////////////////////
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-    if ((application.plugin.configuration.opencl_is_used) &&
-            (application.args.cl_context_given > 0))
+    if (application.opencl.contexts.num_contexts > 0)
     {
         AT_EXIT(exit_release_opencl_contexts);
         AT_QUICK_EXIT(exit_release_opencl_contexts_quick);
@@ -1036,6 +1025,41 @@ static void initialize(int argc, char *argv[])
         AT_QUICK_EXIT(exit_quit_sdl);
     }
 #endif
+
+    ///////////////////////////////
+    // Create buffers from files //
+    ///////////////////////////////
+
+    if (application.files.num_buffers > 0)
+    {
+        application.files.buffers = malloc(
+                sizeof(*application.files.buffers) * application.files.num_buffers);
+        if (application.files.buffers == NULL)
+        {
+            ERROR("couldn't allocate array of file buffers");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (unsigned i = 0; i < application.files.num_buffers; i++)
+            application.files.buffers[i] = (station_buffer_t){0};
+
+        AT_EXIT(exit_destroy_buffers);
+
+        for (unsigned i = 0; i < application.files.num_buffers; i++)
+        {
+            bool success = station_fill_buffer_from_file(
+                    &application.files.buffers[i], application.args.file_arg[i]);
+
+            if (!success)
+            {
+                ERROR_("couldn't create buffer from file #"
+                        COLOR_NUMBER "%u" COLOR_RESET " '"
+                        COLOR_STRING "%s" COLOR_RESET "'\n",
+                        i, application.args.file_arg[i]);
+                exit(STATION_APP_ERROR_FILE);
+            }
+        }
+    }
 }
 
 static void exit_release_args(void)
@@ -1046,15 +1070,6 @@ static void exit_release_args(void)
 static void exit_unload_plugin(void)
 {
     dlclose(application.plugin.handle);
-}
-
-static void exit_destroy_buffers(void)
-{
-    if (application.files.buffers != NULL)
-        for (size_t i = 0; i < application.files.num_buffers; i++)
-            station_clear_buffer(&application.files.buffers[i]);
-
-    free(application.files.buffers);
 }
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
@@ -1079,6 +1094,15 @@ static void exit_quit_sdl(void)
     SDL_Quit();
 }
 #endif
+
+static void exit_destroy_buffers(void)
+{
+    if (application.files.buffers != NULL)
+        for (size_t i = 0; i < application.files.num_buffers; i++)
+            station_clear_buffer(&application.files.buffers[i]);
+
+    free(application.files.buffers);
+}
 
 static void exit_end_plugin_help_fn_output(void)
 {
@@ -1113,8 +1137,8 @@ static int run(void)
     {
         station_plugin_init_func_inputs_t plugin_init_func_inputs = {
             .cmdline = application.plugin.configuration.cmdline,
+            .signal_states = &application.signal.set,
             .files = &application.files,
-            .signals = &application.signal.set,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,
             .opencl_contexts = &application.opencl.contexts,
             .sdl_is_available = application.plugin.configuration.sdl_is_used,
@@ -1443,39 +1467,37 @@ static void prepare_opencl_tmp_arrays(void)
 
 static void create_opencl_contexts(void)
 {
-    application.opencl.contexts.num_platforms = application.args.cl_context_given;
-
     // Allocate array of contexts
     application.opencl.contexts.contexts = malloc(sizeof(cl_context) *
-            application.opencl.contexts.num_platforms);
+            application.opencl.contexts.num_contexts);
     if (application.opencl.contexts.contexts == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platform contexts");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
-    for (cl_uint i = 0; i < application.opencl.contexts.num_platforms; i++)
+    for (cl_uint i = 0; i < application.opencl.contexts.num_contexts; i++)
         application.opencl.contexts.contexts[i] = NULL;
 
     // Allocate array of platforms
-    application.opencl.contexts.platforms = malloc(
-            sizeof(*application.opencl.contexts.platforms) *
-            application.opencl.contexts.num_platforms);
-    if (application.opencl.contexts.platforms == NULL)
+    application.opencl.contexts.context_info = malloc(
+            sizeof(*application.opencl.contexts.context_info) *
+            application.opencl.contexts.num_contexts);
+    if (application.opencl.contexts.context_info == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platforms");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
-    for (cl_uint i = 0; i < application.opencl.contexts.num_platforms; i++)
+    for (cl_uint i = 0; i < application.opencl.contexts.num_contexts; i++)
     {
-        application.opencl.contexts.platforms[i].platform_id = NULL;
-        application.opencl.contexts.platforms[i].device_ids = NULL;
-        application.opencl.contexts.platforms[i].num_devices = 0;
+        application.opencl.contexts.context_info[i].platform_id = NULL;
+        application.opencl.contexts.context_info[i].device_ids = NULL;
+        application.opencl.contexts.context_info[i].num_devices = 0;
     }
 
     // Create contexts
-    for (cl_uint i = 0; i < application.opencl.contexts.num_platforms; i++)
+    for (cl_uint i = 0; i < application.opencl.contexts.num_contexts; i++)
     {
         // Extract platform index
         cl_uint platform_idx = strtoul(application.args.cl_context_arg[i], (char**)NULL, 16);
@@ -1498,12 +1520,12 @@ static void create_opencl_contexts(void)
         }
 
         // Copy platform ID
-        application.opencl.contexts.platforms[i].platform_id =
+        application.opencl.contexts.context_info[i].platform_id =
             application.opencl.tmp.platform_list[platform_idx];
 
         // Compute number of devices from device mask
         if (device_mask == NULL)
-            application.opencl.contexts.platforms[i].num_devices =
+            application.opencl.contexts.context_info[i].num_devices =
                 application.opencl.tmp.num_devices[platform_idx];
         else
         {
@@ -1518,11 +1540,11 @@ static void create_opencl_contexts(void)
                 else
                     chr -= '0';
 
-                application.opencl.contexts.platforms[i].num_devices +=
+                application.opencl.contexts.context_info[i].num_devices +=
                     (int[16]){0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4}[chr];
             }
 
-            if (application.opencl.contexts.platforms[i].num_devices >
+            if (application.opencl.contexts.context_info[i].num_devices >
                     application.opencl.tmp.num_devices[platform_idx])
             {
                 ERROR_("OpenCL device mask " COLOR_NUMBER "%s" COLOR_RESET
@@ -1536,9 +1558,9 @@ static void create_opencl_contexts(void)
         }
 
         // Allocate array of devices
-        application.opencl.contexts.platforms[i].device_ids = malloc(
-                sizeof(cl_device_id) * application.opencl.contexts.platforms[i].num_devices);
-        if (application.opencl.contexts.platforms[i].device_ids == NULL)
+        application.opencl.contexts.context_info[i].device_ids = malloc(
+                sizeof(cl_device_id) * application.opencl.contexts.context_info[i].num_devices);
+        if (application.opencl.contexts.context_info[i].device_ids == NULL)
         {
             ERROR("couldn't allocate array of OpenCL devices");
             exit(STATION_APP_ERROR_MALLOC);
@@ -1549,7 +1571,7 @@ static void create_opencl_contexts(void)
         {
             for (cl_uint device_idx = 0; device_idx <
                     application.opencl.tmp.num_devices[platform_idx]; device_idx++)
-                application.opencl.contexts.platforms[i].device_ids[device_idx] =
+                application.opencl.contexts.context_info[i].device_ids[device_idx] =
                     application.opencl.tmp.device_list[platform_idx][device_idx];
         }
         else
@@ -1581,7 +1603,7 @@ static void create_opencl_contexts(void)
                             exit(STATION_APP_ERROR_ARGUMENTS);
                         }
 
-                        application.opencl.contexts.platforms[i].device_ids[j++] =
+                        application.opencl.contexts.context_info[i].device_ids[j++] =
                             application.opencl.tmp.device_list[platform_idx][device_idx];
                     }
 
@@ -1594,11 +1616,11 @@ static void create_opencl_contexts(void)
         cl_int ret;
 
         cl_context_properties context_properties[] = {CL_CONTEXT_PLATFORM,
-            (cl_context_properties)application.opencl.contexts.platforms[i].platform_id, 0};
+            (cl_context_properties)application.opencl.contexts.context_info[i].platform_id, 0};
 
         application.opencl.contexts.contexts[i] = clCreateContext(context_properties,
-                application.opencl.contexts.platforms[i].num_devices,
-                application.opencl.contexts.platforms[i].device_ids,
+                application.opencl.contexts.context_info[i].num_devices,
+                application.opencl.contexts.context_info[i].device_ids,
                 NULL, (void*)NULL, &ret);
         if (ret != CL_SUCCESS)
         {
@@ -1633,15 +1655,15 @@ static void exit_release_opencl_contexts(void)
     if (application.opencl.contexts.contexts != NULL)
         free(application.opencl.contexts.contexts);
 
-    if (application.opencl.contexts.platforms != NULL)
+    if (application.opencl.contexts.context_info != NULL)
     {
-        for (uint32_t i = 0; i < application.opencl.contexts.num_platforms; i++)
-            free(application.opencl.contexts.platforms[i].device_ids);
+        for (uint32_t i = 0; i < application.opencl.contexts.num_contexts; i++)
+            free(application.opencl.contexts.context_info[i].device_ids);
 
-        free(application.opencl.contexts.platforms);
+        free(application.opencl.contexts.context_info);
     }
 
-    application.opencl.contexts.num_platforms = 0;
+    application.opencl.contexts.num_contexts = 0;
 
     release_opencl_tmp_arrays();
 }
@@ -1650,7 +1672,7 @@ static void exit_release_opencl_contexts_quick(void)
 {
     if (application.opencl.contexts.contexts != NULL)
     {
-        for (uint32_t i = 0; i < application.opencl.contexts.num_platforms; i++)
+        for (uint32_t i = 0; i < application.opencl.contexts.num_contexts; i++)
             if (application.opencl.contexts.contexts[i] != NULL)
                 clReleaseContext(application.opencl.contexts.contexts[i]);
     }

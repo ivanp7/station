@@ -351,12 +351,12 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, 
         args->cmdline = argv[1]; // first argument will be draw as a floating text
 
     // Catch the following signals
-    args->signals->signal_SIGINT = true;
-    args->signals->signal_SIGQUIT = true;
-    args->signals->signal_SIGTERM = true;
-    args->files_are_used = true;
-    args->concurrent_processing_is_used = true;
-    args->opencl_is_used = true; // allow contexts to be created
+    args->signals_used->signal_SIGINT = true;
+    args->signals_used->signal_SIGQUIT = true;
+    args->signals_used->signal_SIGTERM = true;
+    args->num_files_used = 1;
+    args->num_concurrent_processing_contexts_used = 1;
+    args->num_opencl_contexts_used = -1; // allow any number of contexts to be created
     args->sdl_is_used = true;
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -381,7 +381,7 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
     outputs->fsm_initial_state.sfunc = sfunc_pre; // begin FSM execution from sfunc_pre()
     outputs->fsm_data = resources;
 
-    resources->signals = inputs->signals;
+    resources->signals = inputs->signal_states;
 
     if (inputs->concurrent_processing_contexts->num_contexts > 0)
         resources->concurrent_processing_context = &inputs->concurrent_processing_contexts->contexts[0];
