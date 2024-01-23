@@ -44,7 +44,7 @@
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
 
-#include <station/parallel.fun.h>
+#include <station/concurrent.fun.h>
 
 #include <station/sdl.typ.h>
 #include <station/opencl.typ.h>
@@ -202,8 +202,8 @@ static struct {
     } signal;
 
     struct {
-        station_parallel_processing_contexts_array_t contexts;
-    } parallel_processing;
+        station_concurrent_processing_contexts_array_t contexts;
+    } concurrent_processing;
 
     struct {
         station_opencl_contexts_array_t contexts;
@@ -796,10 +796,10 @@ static void initialize(int argc, char *argv[])
             PRINT("\n");
         }
 
-        if (application.plugin.configuration.parallel_processing_is_used &&
+        if (application.plugin.configuration.concurrent_processing_is_used &&
                 (application.args.threads_given > 0))
         {
-            PRINT_("Parallel processing contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
+            PRINT_("Concurrent processing contexts: " COLOR_NUMBER "%u" COLOR_RESET "\n",
                     application.args.threads_given);
 
             for (unsigned i = 0; i < application.args.threads_given; i++)
@@ -949,30 +949,30 @@ static void initialize(int argc, char *argv[])
 #endif
 
     ////////////////////////////////////////
-    // Create parallel processing threads //
+    // Create concurrent processing threads //
     ////////////////////////////////////////
 
-    if ((application.plugin.configuration.parallel_processing_is_used) &&
+    if ((application.plugin.configuration.concurrent_processing_is_used) &&
             (application.args.threads_given > 0))
     {
-        application.parallel_processing.contexts.num_contexts = application.args.threads_given;
+        application.concurrent_processing.contexts.num_contexts = application.args.threads_given;
 
-        application.parallel_processing.contexts.contexts = malloc(
-                sizeof(*application.parallel_processing.contexts.contexts) *
-                application.parallel_processing.contexts.num_contexts);
-        if (application.parallel_processing.contexts.contexts == NULL)
+        application.concurrent_processing.contexts.contexts = malloc(
+                sizeof(*application.concurrent_processing.contexts.contexts) *
+                application.concurrent_processing.contexts.num_contexts);
+        if (application.concurrent_processing.contexts.contexts == NULL)
         {
-            ERROR("couldn't allocate array of parallel processing contexts");
+            ERROR("couldn't allocate array of concurrent processing contexts");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
-        for (unsigned i = 0; i < application.parallel_processing.contexts.num_contexts; i++)
-            application.parallel_processing.contexts.contexts[i].state = NULL;
+        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+            application.concurrent_processing.contexts.contexts[i].state = NULL;
 
         AT_EXIT(exit_stop_threads);
         AT_QUICK_EXIT(exit_stop_threads);
 
-        for (unsigned i = 0; i < application.parallel_processing.contexts.num_contexts; i++)
+        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
         {
             station_threads_number_t num_threads;
             bool busy_wait;
@@ -988,13 +988,13 @@ static void initialize(int argc, char *argv[])
                 busy_wait = true;
             }
 
-            int code = station_parallel_processing_initialize_context(
-                    &application.parallel_processing.contexts.contexts[i],
+            int code = station_concurrent_processing_initialize_context(
+                    &application.concurrent_processing.contexts.contexts[i],
                     num_threads, busy_wait);
 
             if (code != 0)
             {
-                ERROR_("couldn't create parallel processing context #"
+                ERROR_("couldn't create concurrent processing context #"
                         COLOR_NUMBER "%u" COLOR_RESET ", got error "
                         COLOR_ERROR "%i" COLOR_RESET, i, code);
                 exit(STATION_APP_ERROR_THREADS);
@@ -1066,11 +1066,11 @@ static void exit_stop_signal_management_thread(void)
 
 static void exit_stop_threads(void)
 {
-    if (application.parallel_processing.contexts.contexts != NULL)
-        for (unsigned i = 0; i < application.parallel_processing.contexts.num_contexts; i++)
-            station_parallel_processing_destroy_context(&application.parallel_processing.contexts.contexts[i]);
+    if (application.concurrent_processing.contexts.contexts != NULL)
+        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+            station_concurrent_processing_destroy_context(&application.concurrent_processing.contexts.contexts[i]);
 
-    free(application.parallel_processing.contexts.contexts);
+    free(application.concurrent_processing.contexts.contexts);
 }
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -1115,7 +1115,7 @@ static int run(void)
             .cmdline = application.plugin.configuration.cmdline,
             .files = &application.files,
             .signals = &application.signal.set,
-            .parallel_processing_contexts = &application.parallel_processing.contexts,
+            .concurrent_processing_contexts = &application.concurrent_processing.contexts,
             .opencl_contexts = &application.opencl.contexts,
             .sdl_is_available = application.plugin.configuration.sdl_is_used,
         };

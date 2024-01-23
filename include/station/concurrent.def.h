@@ -19,24 +19,24 @@
 
 /**
  * @file
- * @brief Macros for parallel processing.
+ * @brief Macros for concurrent processing.
  */
 
 #pragma once
-#ifndef _STATION_PARALLEL_DEF_H_
-#define _STATION_PARALLEL_DEF_H_
+#ifndef _STATION_CONCURRENT_DEF_H_
+#define _STATION_CONCURRENT_DEF_H_
 
 /**
- * @brief Declarator of a parallel processing function.
+ * @brief Declarator of a concurrent processing function.
  */
 #define STATION_PFUNC(name) \
     void name(void *data, station_task_idx_t task_idx, station_thread_idx_t thread_idx)
 
 /**
- * @brief Declarator of a parallel processing callback function.
+ * @brief Declarator of a concurrent processing callback function.
  */
 #define STATION_PFUNC_CALLBACK(name) \
     void name(void *data, station_thread_idx_t thread_idx)
 
-#endif // _STATION_PARALLEL_DEF_H_
+#endif // _STATION_CONCURRENT_DEF_H_
 

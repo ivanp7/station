@@ -19,25 +19,25 @@
 
 /**
  * @file
- * @brief Types for parallel processing.
+ * @brief Types for concurrent processing.
  */
 
 #pragma once
-#ifndef _STATION_PARALLEL_TYP_H_
-#define _STATION_PARALLEL_TYP_H_
+#ifndef _STATION_CONCURRENT_TYP_H_
+#define _STATION_CONCURRENT_TYP_H_
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 
-struct station_parallel_processing_threads_state;
+struct station_concurrent_processing_threads_state;
 
 /**
- * @brief Index of a parallel task.
+ * @brief Index of a concurrent task.
  */
 typedef uint32_t station_task_idx_t;
 /**
- * @brief Number of parallel tasks.
+ * @brief Number of concurrent tasks.
  */
 typedef station_task_idx_t station_tasks_number_t;
 
@@ -51,7 +51,7 @@ typedef uint16_t station_thread_idx_t;
 typedef station_thread_idx_t station_threads_number_t;
 
 /**
- * @brief Parallel processing function.
+ * @brief Concurrent processing function.
  */
 typedef void (*station_pfunc_t)(
         void *data, ///< [in,out] Processed data.
@@ -60,9 +60,9 @@ typedef void (*station_pfunc_t)(
 );
 
 /**
- * @brief Parallel processing callback.
+ * @brief Concurrent processing callback.
  *
- * This function is called when parallel processing is complete.
+ * This function is called when concurrent processing is complete.
  */
 typedef void (*station_pfunc_callback_t)(
         void *data, ///< [in,out] Callback data.
@@ -70,21 +70,21 @@ typedef void (*station_pfunc_callback_t)(
 );
 
 /**
- * @brief Parallel processing context.
+ * @brief Concurrent processing context.
  */
-typedef struct station_parallel_processing_context {
-    struct station_parallel_processing_threads_state *state; ///< State of parallel processing threads.
-    station_threads_number_t num_threads; ///< Number of parallel processing threads.
+typedef struct station_concurrent_processing_context {
+    struct station_concurrent_processing_threads_state *state; ///< State of concurrent processing threads.
+    station_threads_number_t num_threads; ///< Number of concurrent processing threads.
     bool busy_wait; ///< Whether busy-waiting is enabled.
-} station_parallel_processing_context_t;
+} station_concurrent_processing_context_t;
 
 /**
- * @brief Array of parallel processing contexts.
+ * @brief Array of concurrent processing contexts.
  */
-typedef struct station_parallel_processing_contexts_array {
+typedef struct station_concurrent_processing_contexts_array {
     size_t num_contexts;
-    station_parallel_processing_context_t *contexts;
-} station_parallel_processing_contexts_array_t;
+    station_concurrent_processing_context_t *contexts;
+} station_concurrent_processing_contexts_array_t;
 
-#endif // _STATION_PARALLEL_TYP_H_
+#endif // _STATION_CONCURRENT_TYP_H_
 

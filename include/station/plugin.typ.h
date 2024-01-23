@@ -33,7 +33,7 @@
 
 struct station_buffers_array;
 struct station_signal_set;
-struct station_parallel_processing_contexts_array;
+struct station_concurrent_processing_contexts_array;
 struct station_opencl_contexts_array;
 
 /**
@@ -44,7 +44,7 @@ typedef struct station_plugin_conf_func_args {
 
     struct station_signal_set *signals; ///< Signals to watch.
     bool files_are_used; ///< Whether files are used and should be read.
-    bool parallel_processing_is_used; ///< Whether parallel processing is used and should be initialized.
+    bool concurrent_processing_is_used; ///< Whether concurrent processing is used and should be initialized.
     bool opencl_is_used; ///< Whether OpenCL is used and should be initialized.
     bool sdl_is_used; ///< Whether SDL is used and should be initialized.
 
@@ -61,7 +61,7 @@ typedef struct station_plugin_init_func_inputs {
 
     struct station_signal_set *signals; ///< States of signals.
 
-    struct station_parallel_processing_contexts_array *parallel_processing_contexts; ///< Parallel processing contexts.
+    struct station_concurrent_processing_contexts_array *concurrent_processing_contexts; ///< Concurrent processing contexts.
     struct station_opencl_contexts_array *opencl_contexts; ///< OpenCL contexts.
 
     bool sdl_is_available; ///< Whether SDL is available for use.

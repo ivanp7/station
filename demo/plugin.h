@@ -2,8 +2,8 @@
 
 #include <station/plugin.def.h>
 #include <station/fsm.def.h>
-#include <station/parallel.def.h>
-#include <station/parallel.typ.h>
+#include <station/concurrent.def.h>
+#include <station/concurrent.typ.h>
 #include <station/sdl.typ.h>
 #include <station/font.typ.h>
 
@@ -15,7 +15,7 @@
 #endif
 
 
-// Parameters for parallel execution of pfunc_inc() and pfunc_dec()
+// Parameters for concurrent execution of pfunc_inc() and pfunc_dec()
 #define NUM_TASKS 1024
 #define BATCH_SIZE 16 // number of tasks each thread does at once
 
@@ -34,8 +34,8 @@ struct station_state;
 struct plugin_resources {
     struct station_signal_set *signals; // signal flags
 
-    station_parallel_processing_context_t
-        *parallel_processing_context; // for multithreaded rendering
+    station_concurrent_processing_context_t
+        *concurrent_processing_context; // for multithreaded rendering
 
 #ifdef STATION_IS_SDL_SUPPORTED
     SDL_Event event; // for window events
@@ -57,7 +57,7 @@ struct plugin_resources {
 };
 
 
-// Parallel processing functions
+// Concurrent processing functions
 static STATION_PFUNC_CALLBACK(pfunc_cb_flag);
 
 static STATION_PFUNC(pfunc_inc);

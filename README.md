@@ -5,7 +5,7 @@
 The library provides types, functions, macros, constants for the following things:
 
 * finite-state machines as algorithm of execution (`fsm.*.h`);
-* parallel processing using threads (`parallel.*.h`);
+* concurrent processing using threads (`concurrent.*.h`);
 * signal management in multithreading environment (`signal.*.h`);
 * quick & easy SDL windows for drawing (`sdl.*.h`);
 * fonts support for drawing (`font.*.h`);
@@ -85,7 +85,7 @@ Output options:
   -v, --verbose                 Display more information
 
 Execution options:
-  -j, --threads=[-]THREADS      (multiple) Create parallel processing context,
+  -j, --threads=[-]THREADS      (multiple) Create concurrent processing context,
                                   negative means busy-wait
   -c, --cl-context=PLATFORM_IDX[:DEVICE_IDX_MASK]
                                 (multiple) Create OpenCL context

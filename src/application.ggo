@@ -25,7 +25,7 @@ option "no-logo" Q "Don't display application logo"
 option "verbose" v "Display more information"
 
 section "Execution options"
-option "threads" j "(multiple) Create parallel processing context, negative means busy-wait" int typestr="[-]THREADS" multiple
+option "threads" j "(multiple) Create concurrent processing context, negative means busy-wait" int typestr="[-]THREADS" multiple
 option "cl-context" c "(multiple) Create OpenCL context" string typestr="PLATFORM_IDX[:DEVICE_IDX_MASK]" multiple
 option "no-sdl" n "Don't initialize SDL subsystems"
 

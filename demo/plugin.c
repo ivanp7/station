@@ -6,7 +6,7 @@
 #include <station/signal.typ.h>
 #include <station/signal.def.h>
 
-#include <station/parallel.fun.h>
+#include <station/concurrent.fun.h>
 #include <station/sdl.fun.h>
 #include <station/font.fun.h>
 
@@ -16,7 +16,7 @@
 #include <unistd.h> // for alarm()
 
 
-// Parallel processing callback function
+// Concurrent processing callback function
 static STATION_PFUNC_CALLBACK(pfunc_cb_flag) // implicit arguments: data, thread_idx
 {
     (void) thread_idx;
@@ -27,7 +27,7 @@ static STATION_PFUNC_CALLBACK(pfunc_cb_flag) // implicit arguments: data, thread
     *flag = true;
 }
 
-// Parallel processing function
+// Concurrent processing function
 static STATION_PFUNC(pfunc_inc) // implicit arguments: data, task_idx, thread_idx
 {
     (void) thread_idx;
@@ -40,7 +40,7 @@ static STATION_PFUNC(pfunc_inc) // implicit arguments: data, task_idx, thread_id
     mtx_unlock(&resources->counter_mutex);
 }
 
-// Parallel processing function
+// Concurrent processing function
 static STATION_PFUNC(pfunc_dec) // implicit arguments: data, task_idx, thread_idx
 {
     (void) thread_idx;
@@ -54,7 +54,7 @@ static STATION_PFUNC(pfunc_dec) // implicit arguments: data, task_idx, thread_id
 }
 
 #ifdef STATION_IS_SDL_SUPPORTED
-// Parallel processing function
+// Concurrent processing function
 static STATION_PFUNC(pfunc_draw) // implicit arguments: data, task_idx, thread_idx
 {
     (void) thread_idx;
@@ -84,12 +84,12 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 
     struct plugin_resources *resources = fsm_data;
 
-    if (resources->parallel_processing_context != NULL)
+    if (resources->concurrent_processing_context != NULL)
     {
         atomic_bool flag = false;
 
         // Increment the counter to check if all task indices were processed
-        station_parallel_processing_execute(resources->parallel_processing_context,
+        station_concurrent_processing_execute(resources->concurrent_processing_context,
                 NUM_TASKS, BATCH_SIZE, pfunc_inc, resources, pfunc_cb_flag, &flag, false); // non-blocking call
 
         // Busy-wait until done
@@ -113,12 +113,12 @@ static STATION_SFUNC(sfunc_post) // implicit arguments: state, fsm_data
 
     struct plugin_resources *resources = fsm_data;
 
-    if (resources->parallel_processing_context != NULL)
+    if (resources->concurrent_processing_context != NULL)
     {
         atomic_bool flag = false;
 
         // Decrement the counter back to zero to become twice as sure
-        station_parallel_processing_execute(resources->parallel_processing_context,
+        station_concurrent_processing_execute(resources->concurrent_processing_context,
                 NUM_TASKS, BATCH_SIZE, pfunc_dec, resources, pfunc_cb_flag, &flag, false); // non-blocking call
 
         // Busy-wait until done
@@ -247,10 +247,10 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
             }
 
             // step 2: update texture pixels by calling pfunc_draw() from multiple threads
-            if (resources->parallel_processing_context != NULL)
-                station_parallel_processing_execute(resources->parallel_processing_context,
+            if (resources->concurrent_processing_context != NULL)
+                station_concurrent_processing_execute(resources->concurrent_processing_context,
                         TEXTURE_WIDTH*TEXTURE_HEIGHT, BATCH_SIZE, pfunc_draw, resources,
-                        NULL, NULL, resources->parallel_processing_context->busy_wait); // blocking call
+                        NULL, NULL, resources->concurrent_processing_context->busy_wait); // blocking call
             else
                 for (station_task_idx_t task_idx = 0; task_idx < TEXTURE_WIDTH*TEXTURE_HEIGHT; task_idx++)
                     pfunc_draw(resources, task_idx, 0);
@@ -354,7 +354,7 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, 
     args->signals->signal_SIGQUIT = true;
     args->signals->signal_SIGTERM = true;
     args->files_are_used = true;
-    args->parallel_processing_is_used = true;
+    args->concurrent_processing_is_used = true;
     args->opencl_is_used = true; // allow contexts to be created
     args->sdl_is_used = true;
 
@@ -382,10 +382,10 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
 
     resources->signals = inputs->signals;
 
-    if (inputs->parallel_processing_contexts->num_contexts > 0)
-        resources->parallel_processing_context = &inputs->parallel_processing_contexts->contexts[0];
+    if (inputs->concurrent_processing_contexts->num_contexts > 0)
+        resources->concurrent_processing_context = &inputs->concurrent_processing_contexts->contexts[0];
     else
-        resources->parallel_processing_context = NULL;
+        resources->concurrent_processing_context = NULL;
 
     if (inputs->sdl_is_available)
     {
@@ -429,7 +429,7 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
 
     resources->text = inputs->cmdline;
 
-    // Initialize a counter for parallel processing test
+    // Initialize a counter for concurrent processing test
     resources->counter = 0;
     mtx_init(&resources->counter_mutex, mtx_plain);
 

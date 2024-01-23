@@ -25,8 +25,8 @@
 #include <station/buffer.fun.h>
 #include <station/buffer.typ.h>
 
-#include <station/parallel.fun.h>
-#include <station/parallel.typ.h>
+#include <station/concurrent.fun.h>
+#include <station/concurrent.typ.h>
 
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
@@ -45,10 +45,10 @@
 #include <assert.h>
 
 #if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
-#  define STATION_NO_PARALLEL_PROCESSING
+#  define STATION_NO_CONCURRENT_PROCESSING
 #endif
 
-#ifndef STATION_NO_PARALLEL_PROCESSING
+#ifndef STATION_NO_CONCURRENT_PROCESSING
 #  include <threads.h>
 #  include <stdatomic.h>
 #endif
@@ -128,12 +128,12 @@ station_clear_buffer(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// parallel.fun.h
+// concurrent.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef STATION_NO_PARALLEL_PROCESSING
+#ifndef STATION_NO_CONCURRENT_PROCESSING
 
-struct station_parallel_processing_threads_state {
+struct station_concurrent_processing_threads_state {
     struct {
         station_threads_number_t num_threads;
         thrd_t *threads;
@@ -172,20 +172,20 @@ struct station_parallel_processing_threads_state {
     } current;
 };
 
-struct station_parallel_processing_thread_arg {
-    struct station_parallel_processing_threads_state *threads_state;
+struct station_concurrent_processing_thread_arg {
+    struct station_concurrent_processing_threads_state *threads_state;
     station_thread_idx_t thread_idx;
 };
 
 static
 int
-station_parallel_processing_thread(
+station_concurrent_processing_thread(
         void *arg)
 {
-    struct station_parallel_processing_threads_state *threads_state;
+    struct station_concurrent_processing_threads_state *threads_state;
     station_thread_idx_t thread_idx;
     {
-        struct station_parallel_processing_thread_arg *thread_arg = arg;
+        struct station_concurrent_processing_thread_arg *thread_arg = arg;
         assert(thread_arg != NULL);
 
         threads_state = thread_arg->threads_state;
@@ -270,7 +270,7 @@ station_parallel_processing_thread(
         // Loop until no subtasks left
         while (task_idx < num_tasks)
         {
-            // Execute parallel processing function
+            // Execute concurrent processing function
             pfunc(pfunc_data, task_idx, thread_idx);
             remaining_tasks--;
 
@@ -322,15 +322,15 @@ station_parallel_processing_thread(
     return 0;
 }
 
-#endif // STATION_NO_PARALLEL_PROCESSING
+#endif // STATION_NO_CONCURRENT_PROCESSING
 
 int
-station_parallel_processing_initialize_context(
-        station_parallel_processing_context_t *context,
+station_concurrent_processing_initialize_context(
+        station_concurrent_processing_context_t *context,
         station_threads_number_t num_threads,
         bool busy_wait)
 {
-#ifdef STATION_NO_PARALLEL_PROCESSING
+#ifdef STATION_NO_CONCURRENT_PROCESSING
     (void) context;
 
     if (num_threads > 0)
@@ -345,7 +345,7 @@ station_parallel_processing_initialize_context(
         return -1;
 
     // Initialize threads state
-    struct station_parallel_processing_threads_state *threads_state = malloc(sizeof(*threads_state));
+    struct station_concurrent_processing_threads_state *threads_state = malloc(sizeof(*threads_state));
     if (threads_state == NULL)
         return 1;
 
@@ -431,7 +431,7 @@ station_parallel_processing_initialize_context(
 
     for (thread_idx = 0; thread_idx < num_threads; thread_idx++)
     {
-        struct station_parallel_processing_thread_arg *thread_arg =
+        struct station_concurrent_processing_thread_arg *thread_arg =
             malloc(sizeof(*thread_arg));
         if (thread_arg == NULL)
         {
@@ -443,7 +443,7 @@ station_parallel_processing_initialize_context(
         thread_arg->thread_idx = thread_idx;
 
         int res = thrd_create(&threads_state->persistent.threads[thread_idx],
-                station_parallel_processing_thread, thread_arg);
+                station_concurrent_processing_thread, thread_arg);
 
         if (res != thrd_success)
         {
@@ -509,14 +509,14 @@ cleanup:
     free(threads_state);
 
     return code;
-#endif // STATION_NO_PARALLEL_PROCESSING
+#endif // STATION_NO_CONCURRENT_PROCESSING
 }
 
 void
-station_parallel_processing_destroy_context(
-        station_parallel_processing_context_t *context)
+station_concurrent_processing_destroy_context(
+        station_concurrent_processing_context_t *context)
 {
-#ifdef STATION_NO_PARALLEL_PROCESSING
+#ifdef STATION_NO_CONCURRENT_PROCESSING
     (void) context;
 
     return;
@@ -569,12 +569,12 @@ station_parallel_processing_destroy_context(
     context->state = NULL;
     context->num_threads = 0;
     context->busy_wait = false;
-#endif // STATION_NO_PARALLEL_PROCESSING
+#endif // STATION_NO_CONCURRENT_PROCESSING
 }
 
 bool
-station_parallel_processing_execute(
-        station_parallel_processing_context_t *context,
+station_concurrent_processing_execute(
+        station_concurrent_processing_context_t *context,
 
         station_tasks_number_t num_tasks,
         station_tasks_number_t batch_size,
@@ -587,7 +587,7 @@ station_parallel_processing_execute(
 
         bool busy_wait)
 {
-#ifdef STATION_NO_PARALLEL_PROCESSING
+#ifdef STATION_NO_CONCURRENT_PROCESSING
     (void) context;
     (void) batch_size;
 
@@ -703,7 +703,7 @@ station_parallel_processing_execute(
     }
 
     return true;
-#endif // STATION_NO_PARALLEL_PROCESSING
+#endif // STATION_NO_CONCURRENT_PROCESSING
 }
 
 ///////////////////////////////////////////////////////////////////////////////

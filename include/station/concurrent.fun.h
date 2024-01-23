@@ -19,17 +19,17 @@
 
 /**
  * @file
- * @brief Parallel processing related functions.
+ * @brief Concurrent processing related functions.
  */
 
 #pragma once
-#ifndef _STATION_PARALLEL_FUN_H_
-#define _STATION_PARALLEL_FUN_H_
+#ifndef _STATION_CONCURRENT_FUN_H_
+#define _STATION_CONCURRENT_FUN_H_
 
-#include <station/parallel.typ.h>
+#include <station/concurrent.typ.h>
 
 /**
- * @brief Initialize parallel processing context and create threads.
+ * @brief Initialize concurrent processing context and create threads.
  *
  * busy_wait parameter controls waiting behavior of slave threads.
  *
@@ -38,22 +38,22 @@
  * 3 if thrd_create() returned thrd_error.
  */
 int
-station_parallel_processing_initialize_context(
-        station_parallel_processing_context_t *context, ///< [out] Context to initialize.
-        station_threads_number_t num_threads, ///< [in] Number of parallel processing threads to create.
+station_concurrent_processing_initialize_context(
+        station_concurrent_processing_context_t *context, ///< [out] Context to initialize.
+        station_threads_number_t num_threads, ///< [in] Number of concurrent processing threads to create.
         bool busy_wait ///< [in] Whether busy-waiting is enabled.
 );
 
 /**
- * @brief Destroy parallel processing context and join threads.
+ * @brief Destroy concurrent processing context and join threads.
  */
 void
-station_parallel_processing_destroy_context(
-        station_parallel_processing_context_t *context ///< [in] Context to destroy.
+station_concurrent_processing_destroy_context(
+        station_concurrent_processing_context_t *context ///< [in] Context to destroy.
 );
 
 /**
- * @brief Execute a parallel processing function.
+ * @brief Execute a concurrent processing function.
  *
  * If value of batch_size is zero, it is replaced with ((num_tasks - 1) / context->num_threads) + 1.
  * With this batch size pfunc is called no more than once per thread.
@@ -70,13 +70,13 @@ station_parallel_processing_destroy_context(
  * @return True if threads weren't busy and inputs are correct, otherwise false.
  */
 bool
-station_parallel_processing_execute(
-        station_parallel_processing_context_t *context, ///< [in] Parallel processing context.
+station_concurrent_processing_execute(
+        station_concurrent_processing_context_t *context, ///< [in] Concurrent processing context.
 
         station_tasks_number_t num_tasks,  ///< [in] Number of tasks to be processed.
         station_tasks_number_t batch_size, ///< [in] Number of tasks done by a thread per once.
 
-        station_pfunc_t pfunc, ///< [in] Parallel processing function.
+        station_pfunc_t pfunc, ///< [in] Concurrent processing function.
         void *pfunc_data,      ///< [in] Processed data.
 
         station_pfunc_callback_t callback, ///< [in] Callback function or NULL.
@@ -85,5 +85,5 @@ station_parallel_processing_execute(
         bool busy_wait ///< [in] Whether busy-waiting is enabled.
 );
 
-#endif // _STATION_PARALLEL_FUN_H_
+#endif // _STATION_CONCURRENT_FUN_H_
 
