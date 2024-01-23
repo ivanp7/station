@@ -149,7 +149,7 @@ A quick and dirty demo plugin can be found in the `demo` subdirectory.
 
 List of projects using Station:
 
-* [still-alive](https://github.com/ivanp7/still-alive) (built as an application with built-in plugin)
+* [still-alive](https://github.com/ivanp7/still-alive) (built as a standalone executable plugin)
 
 ## Documentation
 
