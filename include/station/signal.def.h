@@ -45,6 +45,26 @@
     atomic_store_explicit(flag_ptr, false, memory_order_relaxed)
 
 /**
+ * @brief Signal set with all flags raised.
+ */
+#define STATION_SIGNAL_SET_ALL      \
+    (station_signal_set_t){         \
+        .signal_SIGALRM = true,     \
+        .signal_SIGCHLD = true,     \
+        .signal_SIGCONT = true,     \
+        .signal_SIGHUP = true,      \
+        .signal_SIGINT = true,      \
+        .signal_SIGQUIT = true,     \
+        .signal_SIGTERM = true,     \
+        .signal_SIGTSTP = true,     \
+        .signal_SIGTTIN = true,     \
+        .signal_SIGTTOU = true,     \
+        .signal_SIGUSR1 = true,     \
+        .signal_SIGUSR2 = true,     \
+        .signal_SIGWINCH = true,    \
+    }
+
+/**
  * @brief Signal handler function declarator.
  */
 #define STATION_SIGNAL_HANDLER_FUNC(name) \
