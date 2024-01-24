@@ -982,7 +982,9 @@ station-app --cl-list[=TYPE]\n\
     if (application.signal.management_used)
     {
         application.signal.management_context =
-            station_signal_management_thread_start(&application.signal.set);
+            station_signal_management_thread_start(&application.signal.set,
+                    application.plugin.configuration.signal_handler,
+                    application.plugin.configuration.signal_handler_data);
 
         if (application.signal.management_context == NULL)
         {

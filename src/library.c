@@ -704,6 +704,9 @@ struct station_signal_management_context
     sigset_t set;
 
     station_signal_set_t *signals;
+    station_signal_handler_func_t handler;
+    void *handler_data;
+
     atomic_bool terminate;
 };
 
@@ -715,15 +718,18 @@ station_signal_management_thread(
     struct station_signal_management_context *context = arg;
     assert(context != NULL);
 
+    siginfo_t siginfo;
     struct timespec delay = {.tv_sec = 0, .tv_nsec = SIGTIMEDWAIT_TIMEOUT_NANO};
 
     while (!atomic_load_explicit(&context->terminate, memory_order_relaxed))
     {
-        int signal = sigtimedwait(&context->set, (siginfo_t*)NULL, &delay);
+        int signal = sigtimedwait(&context->set, &siginfo, &delay);
 
-#define RAISE_SIGNAL(signal)    \
-        case signal:            \
-            STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal); \
+#define RAISE_SIGNAL(signal)                                                \
+        case signal:                                                        \
+            STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal);    \
+            if (context->handler != NULL)                                   \
+                context->handler(signal, &siginfo, context->handler_data);  \
             break;
 
         switch (signal)
@@ -751,10 +757,13 @@ station_signal_management_thread(
 
 struct station_signal_management_context*
 station_signal_management_thread_start(
-        station_signal_set_t *signals)
+        station_signal_set_t *signals,
+        station_signal_handler_func_t signal_handler,
+        void *signal_handler_data)
 {
 #ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     (void) signals;
+    (void) signal_handler;
 
     return NULL;
 #else
@@ -790,6 +799,9 @@ station_signal_management_thread_start(
         return NULL;
 
     context->signals = signals;
+    context->handler = signal_handler;
+    context->handler_data = signal_handler_data;
+
     atomic_init(&context->terminate, false);
 
     if (pthread_create(&context->thread, NULL, station_signal_management_thread, context) != 0)

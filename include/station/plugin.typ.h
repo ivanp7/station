@@ -27,13 +27,13 @@
 #define _STATION_PLUGIN_TYP_H_
 
 #include <station/fsm.typ.h>
+#include <station/signal.typ.h>
 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
 
 struct station_buffers_array;
-struct station_signal_set;
 struct station_concurrent_processing_contexts_array;
 struct station_opencl_contexts_array;
 
@@ -43,12 +43,15 @@ struct station_opencl_contexts_array;
 typedef struct station_plugin_conf_func_args {
     void *cmdline; ///< Pointer to store parsed command line arguments.
 
-    struct station_signal_set *signals_used; ///< Signals to watch.
+    station_signal_set_t *signals_used; ///< Signals to watch.
+    station_signal_handler_func_t signal_handler; ///< Signal handler.
+    void *signal_handler_data; ///< Signal handler data.
+
     size_t num_files_used; ///< Whether files are used and should be read.
     size_t num_concurrent_processing_contexts_used; ///< Whether concurrent processing is used and should be initialized.
     size_t num_opencl_contexts_used; ///< Whether OpenCL is used and should be initialized.
-    bool sdl_is_used; ///< Whether SDL is used and should be initialized.
 
+    bool sdl_is_used; ///< Whether SDL is used and should be initialized.
     uint32_t sdl_init_flags; ///< Flags to pass to SDL_Init() call.
 } station_plugin_conf_func_args_t;
 
@@ -58,7 +61,9 @@ typedef struct station_plugin_conf_func_args {
 typedef struct station_plugin_init_func_inputs {
     void *cmdline; ///< Parsed command line arguments.
 
-    struct station_signal_set *signal_states; ///< States of signals.
+    station_signal_set_t *signal_states; ///< States of signals.
+    void *signal_handler_data; ///< Signal handler data.
+
     struct station_buffers_array *files; ///< File buffers.
     struct station_concurrent_processing_contexts_array *concurrent_processing_contexts; ///< Concurrent processing contexts.
     struct station_opencl_contexts_array *opencl_contexts; ///< OpenCL contexts.

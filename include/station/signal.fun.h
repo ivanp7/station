@@ -26,7 +26,8 @@
 #ifndef _STATION_SIGNAL_FUN_H_
 #define _STATION_SIGNAL_FUN_H_
 
-struct station_signal_set;
+#include <station/signal.typ.h>
+
 struct station_signal_management_context;
 
 /**
@@ -42,11 +43,16 @@ struct station_signal_management_context;
  * Before the thread is started, all flags are cleared (reset to false).
  * When a signal is caught, its corresponding flag is set to true.
  *
+ * Signal handler argument is optional. This handler is called synchronously
+ * and used to get access to the siginfo_t value.
+ *
  * @return Signal management context.
  */
 struct station_signal_management_context*
 station_signal_management_thread_start(
-        struct station_signal_set *signals ///< [in,out] Set of signals to watch.
+        station_signal_set_t *signals, ///< [in,out] Set of signals to watch.
+        station_signal_handler_func_t signal_handler, ///< [in] Signal handler.
+        void *signal_handler_data ///< [in] Signal handler data.
 );
 
 /**
