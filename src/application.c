@@ -1198,6 +1198,7 @@ static int run(void)
         station_plugin_init_func_inputs_t plugin_init_func_inputs = {
             .cmdline = application.plugin.configuration.cmdline,
             .signal_states = &application.signal.set,
+            .signal_handler_data = application.plugin.configuration.signal_handler_data,
             .files = &application.files,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,
             .opencl_contexts = &application.opencl.contexts,
