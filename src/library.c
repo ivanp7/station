@@ -717,7 +717,7 @@ station_signal_management_thread(
 
     struct timespec delay = {.tv_sec = 0, .tv_nsec = SIGTIMEDWAIT_TIMEOUT_NANO};
 
-    while (!atomic_load_explicit(&context->terminate, memory_order_acquire))
+    while (!atomic_load_explicit(&context->terminate, memory_order_relaxed))
     {
         int signal = sigtimedwait(&context->set, (siginfo_t*)NULL, &delay);
 
@@ -813,7 +813,7 @@ station_signal_management_thread_stop(
     if (context == NULL)
         return;
 
-    atomic_store_explicit(&context->terminate, true, memory_order_release);
+    atomic_store_explicit(&context->terminate, true, memory_order_relaxed);
     pthread_join(context->thread, (void**)NULL);
     pthread_sigmask(SIG_UNBLOCK, &context->set, (sigset_t*)NULL);
     free(context);
