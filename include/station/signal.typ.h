@@ -59,7 +59,9 @@ typedef struct station_signal_set {
 typedef void (*station_signal_handler_func_t)(
         int signo,     ///< [in] Signal number.
         void *siginfo, ///< [in] Pointer to siginfo_t data structure.
-        void *data     ///< [in,out] Handler data.
+
+        station_signal_set_t *signal_states, ///< [in,out] States of signals.
+        void *data                           ///< [in,out] Handler data.
 );
 
 #endif // _STATION_SIGNAL_TYP_H_

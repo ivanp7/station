@@ -729,7 +729,8 @@ station_signal_management_thread(
         case signal:                                                        \
             STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal);    \
             if (context->handler != NULL)                                   \
-                context->handler(signal, &siginfo, context->handler_data);  \
+                context->handler(signal, &siginfo,                          \
+                        context->signals, context->handler_data);           \
             break;
 
         switch (signal)
