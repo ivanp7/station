@@ -734,16 +734,18 @@ station_signal_management_thread(
 
         switch (signal)
         {
+            RAISE_SIGNAL(SIGALRM)
+            RAISE_SIGNAL(SIGCHLD)
+            RAISE_SIGNAL(SIGCONT)
             RAISE_SIGNAL(SIGHUP)
             RAISE_SIGNAL(SIGINT)
             RAISE_SIGNAL(SIGQUIT)
-            RAISE_SIGNAL(SIGUSR1)
-            RAISE_SIGNAL(SIGUSR2)
-            RAISE_SIGNAL(SIGALRM)
             RAISE_SIGNAL(SIGTERM)
             RAISE_SIGNAL(SIGTSTP)
             RAISE_SIGNAL(SIGTTIN)
             RAISE_SIGNAL(SIGTTOU)
+            RAISE_SIGNAL(SIGUSR1)
+            RAISE_SIGNAL(SIGUSR2)
             RAISE_SIGNAL(SIGWINCH)
         }
 
@@ -781,16 +783,18 @@ station_signal_management_thread_start(
         signals->signal_##signal = false;   \
         sigaddset(&context->set, signal); }
 
+    ADD_SIGNAL(SIGALRM)
+    ADD_SIGNAL(SIGCHLD)
+    ADD_SIGNAL(SIGCONT)
     ADD_SIGNAL(SIGHUP)
     ADD_SIGNAL(SIGINT)
     ADD_SIGNAL(SIGQUIT)
-    ADD_SIGNAL(SIGUSR1)
-    ADD_SIGNAL(SIGUSR2)
-    ADD_SIGNAL(SIGALRM)
     ADD_SIGNAL(SIGTERM)
     ADD_SIGNAL(SIGTSTP)
     ADD_SIGNAL(SIGTTIN)
     ADD_SIGNAL(SIGTTOU)
+    ADD_SIGNAL(SIGUSR1)
+    ADD_SIGNAL(SIGUSR2)
     ADD_SIGNAL(SIGWINCH)
 
 #undef ADD_SIGNAL

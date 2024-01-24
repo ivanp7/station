@@ -68,14 +68,13 @@ so that the latter becomes a standalone application.
 ## Contents of `station-app --help`
 
 ```
-Usage:
-
 station-app [options...] PLUGIN_FILE [-- [plugin options...]]
     or
 station-app --help [PLUGIN_FILE [-- [plugin help options...]]]
     or
 station-app --cl-list[=TYPE]
 
+Usage:
 
   -C, --conf=FILE               (multiple) Parse arguments from file
 
@@ -90,8 +89,8 @@ Output options:
   -v, --verbose                 Display more information
 
 Execution options:
-  -j, --threads=[-]THREADS      (multiple) Create concurrent processing context,
-                                  negative means busy-wait
+  -j, --threads=[-]THREADS      (multiple) Create concurrent processing
+                                  context, negative means busy-wait
   -c, --cl-context=PLATFORM_IDX[:DEVICE_IDX_MASK]
                                 (multiple) Create OpenCL context
   -n, --no-sdl                  Don't initialize SDL subsystems
@@ -100,18 +99,19 @@ Data options:
   -f, --file=FILE               (multiple) Create data buffer from file
 
 Signal management:
-      --SIGHUP                  Watch signal #1
-      --SIGINT                  Watch signal #2
-      --SIGQUIT                 Watch signal #3
-      --SIGUSR1                 Watch signal #10
-      --SIGUSR2                 Watch signal #12
-      --SIGALRM                 Watch signal #14
-      --SIGTERM                 Watch signal #15
-      --SIGTSTP                 Watch signal #20
-      --SIGTTIN                 Watch signal #21
-      --SIGTTOU                 Watch signal #22
-      --SIGWINCH                Watch signal #28
-
+      --SIGALRM                 Watch signal
+      --SIGCHLD                 Watch signal
+      --SIGCONT                 Watch signal
+      --SIGHUP                  Watch signal
+      --SIGINT                  Watch signal
+      --SIGQUIT                 Watch signal
+      --SIGTERM                 Watch signal
+      --SIGTSTP                 Watch signal
+      --SIGTTIN                 Watch signal
+      --SIGTTOU                 Watch signal
+      --SIGUSR1                 Watch signal
+      --SIGUSR2                 Watch signal
+      --SIGWINCH                Watch signal
 ```
 
 ## How to build

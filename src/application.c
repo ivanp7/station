@@ -591,8 +591,7 @@ station-app [options...] PLUGIN_FILE [-- [plugin options...]]\n\
     or\n\
 station-app --help [PLUGIN_FILE [-- [plugin help options...]]]\n\
     or\n\
-station-app --cl-list[=TYPE]\n\
-");
+station-app --cl-list[=TYPE]\n\n");
                 args_parser_print_help();
                 exit(EXIT_SUCCESS);
             }
@@ -604,8 +603,7 @@ station-app [options...] [-- [plugin options...]]\n\
     or\n\
 station-app --help [-- [plugin help options...]]\n\
     or\n\
-station-app --cl-list[=TYPE]\n\
-");
+station-app --cl-list[=TYPE]\n\n");
             args_parser_print_help();
             PRINT("\n");
         }
@@ -786,19 +784,21 @@ station-app --cl-list[=TYPE]\n\
         application.signal.set.signal_##signame = true; \
         application.signal.management_used = true;      \
     } else if (application.signal.set.signal_##signame) \
-        application.signal.management_used = true; } while (0)
+        application.signal.management_used = true; } while (0);
 
-    WATCH_SIGNAL(SIGHUP);
-    WATCH_SIGNAL(SIGINT);
-    WATCH_SIGNAL(SIGQUIT);
-    WATCH_SIGNAL(SIGUSR1);
-    WATCH_SIGNAL(SIGUSR2);
-    WATCH_SIGNAL(SIGALRM);
-    WATCH_SIGNAL(SIGTERM);
-    WATCH_SIGNAL(SIGTSTP);
-    WATCH_SIGNAL(SIGTTIN);
-    WATCH_SIGNAL(SIGTTOU);
-    WATCH_SIGNAL(SIGWINCH);
+    WATCH_SIGNAL(SIGALRM)
+    WATCH_SIGNAL(SIGCHLD)
+    WATCH_SIGNAL(SIGCONT)
+    WATCH_SIGNAL(SIGHUP)
+    WATCH_SIGNAL(SIGINT)
+    WATCH_SIGNAL(SIGQUIT)
+    WATCH_SIGNAL(SIGTERM)
+    WATCH_SIGNAL(SIGTSTP)
+    WATCH_SIGNAL(SIGTTIN)
+    WATCH_SIGNAL(SIGTTOU)
+    WATCH_SIGNAL(SIGUSR1)
+    WATCH_SIGNAL(SIGUSR2)
+    WATCH_SIGNAL(SIGWINCH)
 
 #  undef WATCH_SIGNAL
 #else
@@ -846,16 +846,18 @@ station-app --cl-list[=TYPE]\n\
             if (application.signal.set.signal_##signame)    \
                 PRINT(" " COLOR_SIGNAL #signame COLOR_RESET);
 
+            PRINT_SIGNAL(SIGALRM)
+            PRINT_SIGNAL(SIGCHLD)
+            PRINT_SIGNAL(SIGCONT)
             PRINT_SIGNAL(SIGHUP)
             PRINT_SIGNAL(SIGINT)
             PRINT_SIGNAL(SIGQUIT)
-            PRINT_SIGNAL(SIGUSR1)
-            PRINT_SIGNAL(SIGUSR2)
-            PRINT_SIGNAL(SIGALRM)
             PRINT_SIGNAL(SIGTERM)
             PRINT_SIGNAL(SIGTSTP)
             PRINT_SIGNAL(SIGTTIN)
             PRINT_SIGNAL(SIGTTOU)
+            PRINT_SIGNAL(SIGUSR1)
+            PRINT_SIGNAL(SIGUSR2)
             PRINT_SIGNAL(SIGWINCH)
 
 #undef PRINT_SIGNAL

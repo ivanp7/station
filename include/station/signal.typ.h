@@ -35,16 +35,18 @@
  */
 typedef struct station_signal_set {
 #ifndef __STDC_NO_ATOMICS__
+    atomic_bool signal_SIGALRM;
+    atomic_bool signal_SIGCHLD;
+    atomic_bool signal_SIGCONT;
     atomic_bool signal_SIGHUP;
     atomic_bool signal_SIGINT;
     atomic_bool signal_SIGQUIT;
-    atomic_bool signal_SIGUSR1;
-    atomic_bool signal_SIGUSR2;
-    atomic_bool signal_SIGALRM;
     atomic_bool signal_SIGTERM;
     atomic_bool signal_SIGTSTP;
     atomic_bool signal_SIGTTIN;
     atomic_bool signal_SIGTTOU;
+    atomic_bool signal_SIGUSR1;
+    atomic_bool signal_SIGUSR2;
     atomic_bool signal_SIGWINCH;
 #else
     int dummy;
