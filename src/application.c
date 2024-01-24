@@ -26,6 +26,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
+#  undef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+#  undef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+#endif
+
 #ifdef STATION_IS_DLFCN_SUPPORTED
 #  include <dlfcn.h>
 #endif
@@ -44,16 +49,16 @@
 #include <station/plugin.typ.h>
 #include <station/plugin.def.h>
 
-#include <station/buffer.fun.h>
-#include <station/buffer.typ.h>
-
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
 
 #include <station/concurrent.fun.h>
 
-#include <station/sdl.typ.h>
 #include <station/opencl.typ.h>
+#include <station/sdl.typ.h>
+
+#include <station/buffer.fun.h>
+#include <station/buffer.typ.h>
 
 #include "application_args.h"
 
@@ -449,6 +454,14 @@ static void initialize(int argc, char *argv[])
     if (application.verbose)
     {
         PRINT_("Version : " COLOR_VERSION "%u" COLOR_RESET "\n", STATION_PLUGIN_VERSION);
+
+        PRINT("Threads : ");
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+        PRINT(COLOR_FLAG_ON "supported");
+#else
+        PRINT(COLOR_FLAG_OFF "not supported");
+#endif
+        PRINT(COLOR_RESET "\n");
 
         PRINT("Signals : ");
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED

@@ -72,7 +72,11 @@ do
             FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED="true"
             ;;
 
-        S) # feature: enable signal management support
+        C) # feature: enable support for concurrent processing
+            FEATURE_IS_CONCURRENT_PROCESSING_SUPPORTED="true"
+            ;;
+
+        S) # feature: enable support for signal management (requires -C)
             FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED="true"
             ;;
 
@@ -90,6 +94,9 @@ do
 done
 
 [ "${BUILD_TYPE:-}" ] || { echo "Build type is not specified"; exit 1; }
+
+[ -z "${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:-}" -o "${FEATURE_IS_CONCURRENT_PROCESSING_SUPPORTED:-}" ] ||
+    { echo "Signal management requires concurrent processing support"; exit 1; }
 
 ###############################################################################
 # Set flags
@@ -116,7 +123,8 @@ else
     LFLAGS_OPENCL=""
 fi
 
-CFLAGS_COMMON="-pthread $CFLAGS_SDL $CFLAGS_OPENCL \
+CFLAGS_COMMON="$CFLAGS_SDL $CFLAGS_OPENCL \
+${FEATURE_IS_CONCURRENT_PROCESSING_SUPPORTED:+"-pthread -DSTATION_IS_CONCURRENT_PROCESSING_SUPPORTED"} \
 ${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:+"-DSTATION_IS_SIGNAL_MANAGEMENT_SUPPORTED"} \
 ${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
 ${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"}"

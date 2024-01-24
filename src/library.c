@@ -22,6 +22,34 @@
  * @brief Library implementation.
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <assert.h>
+
+#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
+#  undef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+#  undef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+#endif
+
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+#  include <threads.h>
+#  include <stdatomic.h>
+#endif
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+#  include <signal.h>
+#  include <pthread.h>
+#  include <time.h>
+#endif
+
+#ifdef STATION_IS_SDL_SUPPORTED
+#  include <SDL.h>
+#  include <SDL_video.h>
+#  include <SDL_render.h>
+#endif
+
 #include <station/buffer.fun.h>
 #include <station/buffer.typ.h>
 
@@ -38,32 +66,6 @@
 #include <station/font.fun.h>
 #include <station/font.typ.h>
 #include <station/font.def.h>
-
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <assert.h>
-
-#if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
-#  define STATION_NO_CONCURRENT_PROCESSING
-#endif
-
-#ifndef STATION_NO_CONCURRENT_PROCESSING
-#  include <threads.h>
-#  include <stdatomic.h>
-#endif
-
-#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-#  include <signal.h>
-#  include <pthread.h>
-#  include <time.h>
-#endif
-
-#ifdef STATION_IS_SDL_SUPPORTED
-#  include <SDL.h>
-#  include <SDL_video.h>
-#  include <SDL_render.h>
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // buffer.fun.h
@@ -131,7 +133,7 @@ station_clear_buffer(
 // concurrent.fun.h
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef STATION_NO_CONCURRENT_PROCESSING
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
 
 struct station_concurrent_processing_assignment {
     station_pfunc_t pfunc;
@@ -308,7 +310,7 @@ station_concurrent_processing_thread(
     return 0;
 }
 
-#endif // STATION_NO_CONCURRENT_PROCESSING
+#endif // STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
 
 int
 station_concurrent_processing_initialize_context(
@@ -316,8 +318,9 @@ station_concurrent_processing_initialize_context(
         station_threads_number_t num_threads,
         bool busy_wait)
 {
-#ifdef STATION_NO_CONCURRENT_PROCESSING
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
     (void) context;
+    (void) busy_wait;
 
     if (num_threads > 0)
         return -2;
@@ -495,14 +498,14 @@ cleanup:
     free(threads_state);
 
     return code;
-#endif // STATION_NO_CONCURRENT_PROCESSING
+#endif
 }
 
 void
 station_concurrent_processing_destroy_context(
         station_concurrent_processing_context_t *context)
 {
-#ifdef STATION_NO_CONCURRENT_PROCESSING
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
     (void) context;
 
     return;
@@ -555,7 +558,7 @@ station_concurrent_processing_destroy_context(
     context->state = NULL;
     context->num_threads = 0;
     context->busy_wait = false;
-#endif // STATION_NO_CONCURRENT_PROCESSING
+#endif
 }
 
 bool
@@ -573,9 +576,10 @@ station_concurrent_processing_execute(
 
         bool busy_wait)
 {
-#ifdef STATION_NO_CONCURRENT_PROCESSING
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
     (void) context;
     (void) batch_size;
+    (void) busy_wait;
 
     if (pfunc == NULL)
         return false;
@@ -687,7 +691,7 @@ station_concurrent_processing_execute(
     }
 
     return true;
-#endif // STATION_NO_CONCURRENT_PROCESSING
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -769,6 +773,7 @@ station_signal_management_thread_start(
 #ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     (void) signals;
     (void) signal_handler;
+    (void) signal_handler_data;
 
     return NULL;
 #else
