@@ -483,6 +483,7 @@ static void initialize(int argc, char *argv[])
 
     if (application.args.cl_list_given)
     {
+#ifdef STATION_IS_OPENCL_SUPPORTED
         if (application.args.inputs_num > 0)
         {
             ERROR("processing a plugin file after displaying list of OpenCL platforms/devices is not supported");
@@ -494,6 +495,10 @@ static void initialize(int argc, char *argv[])
             ERROR("OpenCL listing mode is mutually exclusive with help mode");
             exit(STATION_APP_ERROR_ARGUMENTS);
         }
+#else
+        ERROR("OpenCL is not supported");
+        exit(STATION_APP_ERROR_ARGUMENTS);
+#endif
     }
     else if (application.args.help_given)
     {
@@ -602,6 +607,7 @@ station-app --help [-- [plugin help options...]]\n\
 station-app --cl-list[=TYPE]\n\
 ");
             args_parser_print_help();
+            PRINT("\n");
         }
     }
 
@@ -609,14 +615,13 @@ station-app --cl-list[=TYPE]\n\
     // Display list of OpenCL platforms/devices //
     //////////////////////////////////////////////
 
-#ifdef STATION_IS_OPENCL_SUPPORTED
     if (application.args.cl_list_given)
     {
+#ifdef STATION_IS_OPENCL_SUPPORTED
         display_opencl_listing();
-
+#endif
         exit(EXIT_SUCCESS);
     }
-#endif
 
     ////////////////////////////////////////
     // Exit if no plugin file is provided //
