@@ -25,7 +25,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dlfcn.h>
+
+#ifdef STATION_IS_DLFCN_SUPPORTED
+#  include <dlfcn.h>
+#endif
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
 #  include <CL/cl.h>
@@ -232,7 +235,10 @@ static struct {
 static void initialize(int argc, char *argv[]);
 
 static void exit_release_args(void);
+
+#ifdef STATION_IS_DLFCN_SUPPORTED
 static void exit_unload_plugin(void);
+#endif
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 static void exit_stop_signal_management_thread(void);
@@ -662,6 +668,7 @@ station-app --cl-list[=TYPE]\n\n");
     // Load plugin file //
     //////////////////////
 
+#ifdef STATION_IS_DLFCN_SUPPORTED
     if (!application.plugin.built_in)
     {
         application.plugin.handle = dlopen(application.args.inputs[0], RTLD_NOW | RTLD_LOCAL);
@@ -673,11 +680,13 @@ station-app --cl-list[=TYPE]\n\n");
         }
         AT_EXIT(exit_unload_plugin);
     }
+#endif
 
     //////////////////////////
     // Obtain plugin vtable //
     //////////////////////////
 
+#ifdef STATION_IS_DLFCN_SUPPORTED
     if (!application.plugin.built_in)
     {
         application.plugin.vtable = dlsym(application.plugin.handle,
@@ -688,6 +697,7 @@ station-app --cl-list[=TYPE]\n\n");
             exit(STATION_APP_ERROR_PLUGIN);
         }
     }
+#endif
 
     /////////////////////////
     // Check plugin format //
@@ -1127,10 +1137,12 @@ static void exit_release_args(void)
     args_parser_free(&application.args);
 }
 
+#ifdef STATION_IS_DLFCN_SUPPORTED
 static void exit_unload_plugin(void)
 {
     dlclose(application.plugin.handle);
 }
+#endif
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 static void exit_stop_signal_management_thread(void)

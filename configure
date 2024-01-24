@@ -138,6 +138,7 @@ $CFLAGS_BUILD_TYPE"
 CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
 ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"}"
+CFLAGS_APPLICATION_DLFCN="-DSTATION_IS_DLFCN_SUPPORTED"
 
 LFLAGS="$LFLAGS_COMMON"
 
@@ -175,6 +176,7 @@ cat <<  _EOF_ > "${PROJECT_DIR}/${NINJA}"
 cflags = $CFLAGS
 cflags_lib = $CFLAGS_LIBRARY
 cflags_app = $CFLAGS_APPLICATION
+cflags_app_dlfcn = $CFLAGS_APPLICATION $CFLAGS_APPLICATION_DLFCN
 lflags = $LFLAGS
 
 
@@ -230,17 +232,20 @@ build ${ODIR}/${FILE_APPLICATION_ARGS}.h ${ODIR}/${FILE_APPLICATION_ARGS}.c: gen
 build ${ODIR}/${FILE_APPLICATION_ARGS}.o: cc ${ODIR}/${FILE_APPLICATION_ARGS}.c
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
+build ${ODIR}/${FILE_APPLICATION}.builtin.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
     cflags_custom = \$cflags_app
+
+build ${ODIR}/${FILE_APPLICATION}.dlfcn.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
+    cflags_custom = \$cflags_app_dlfcn
 
 build ${ODIR}/${FILE_APPLICATION_ENTRY}.o: cc ${SDIR}/${FILE_APPLICATION_ENTRY}.c
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o
+build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.builtin.o
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
-    cflags_custom = \$cflags_app
+build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.dlfcn.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
+    cflags_custom = \$cflags_app_dlfcn
 
 build application-lib: phony ${ODIR}/${OUT_APPLICATION_LIB}
 build application: phony ${ODIR}/${OUT_APPLICATION}
