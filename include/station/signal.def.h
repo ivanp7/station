@@ -44,5 +44,11 @@
 #define STATION_SIGNAL_UNSET_FLAG(flag_ptr) \
     atomic_store_explicit(flag_ptr, false, memory_order_release)
 
+/**
+ * @brief Signal handler function declarator.
+ */
+#define STATION_SIGNAL_HANDLER_FUNC(name) \
+    void name(int signo, void *siginfo, void *data)
+
 #endif // _STATION_SIGNAL_DEF_H_
 
