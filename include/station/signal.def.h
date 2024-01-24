@@ -30,19 +30,19 @@
  * @brief Check state of a signal flag.
  */
 #define STATION_SIGNAL_IS_FLAG_SET(flag_ptr) \
-    atomic_load_explicit(flag_ptr, memory_order_acquire)
+    atomic_load_explicit(flag_ptr, memory_order_relaxed)
 
 /**
  * @brief Set a signal flag.
  */
 #define STATION_SIGNAL_SET_FLAG(flag_ptr) \
-    atomic_store_explicit(flag_ptr, true, memory_order_release)
+    atomic_store_explicit(flag_ptr, true, memory_order_relaxed)
 
 /**
  * @brief Unset a signal flag.
  */
 #define STATION_SIGNAL_UNSET_FLAG(flag_ptr) \
-    atomic_store_explicit(flag_ptr, false, memory_order_release)
+    atomic_store_explicit(flag_ptr, false, memory_order_relaxed)
 
 /**
  * @brief Signal handler function declarator.
