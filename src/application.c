@@ -844,7 +844,7 @@ station-app --cl-list[=TYPE]\n\n");
 
 #define PRINT_SIGNAL(signame)                               \
             if (application.signal.set.signal_##signame)    \
-                PRINT(" " COLOR_SIGNAL #signame COLOR_RESET);
+                PRINT_(" " COLOR_SIGNAL "%s" COLOR_RESET, #signame + 3);
 
             PRINT_SIGNAL(SIGALRM)
             PRINT_SIGNAL(SIGCHLD)
