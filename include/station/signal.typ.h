@@ -30,6 +30,8 @@
 #  include <stdatomic.h>
 #endif
 
+#include <stdbool.h>
+
 /**
  * @brief Set of supported signals.
  */
@@ -55,8 +57,10 @@ typedef struct station_signal_set {
 
 /**
  * @brief Signal handler.
+ *
+ * @return Whether the corresponding signal flag should be set.
  */
-typedef void (*station_signal_handler_func_t)(
+typedef bool (*station_signal_handler_func_t)(
         int signo,     ///< [in] Signal number.
         void *siginfo, ///< [in] Pointer to siginfo_t data structure.
 

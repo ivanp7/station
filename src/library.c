@@ -725,16 +725,18 @@ station_signal_management_thread(
     {
         int signal = sigtimedwait(&context->set, &siginfo, &delay);
 
-#define RAISE_SIGNAL(signal)                                                \
-        case signal:                                                        \
-            STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal);    \
-            if (context->handler != NULL)                                   \
-                context->handler(signal, &siginfo,                          \
-                        context->signals, context->handler_data);           \
-            break;
-
+        bool set_flag = true;
         switch (signal)
         {
+#define RAISE_SIGNAL(signal)                                                        \
+            case signal:                                                            \
+                if (context->handler != NULL)                                       \
+                    set_flag = context->handler(signal, &siginfo,                   \
+                            context->signals, context->handler_data);               \
+                if (set_flag)                                                       \
+                    STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal);    \
+                break;
+
             RAISE_SIGNAL(SIGALRM)
             RAISE_SIGNAL(SIGCHLD)
             RAISE_SIGNAL(SIGCONT)
@@ -748,9 +750,9 @@ station_signal_management_thread(
             RAISE_SIGNAL(SIGUSR1)
             RAISE_SIGNAL(SIGUSR2)
             RAISE_SIGNAL(SIGWINCH)
-        }
 
 #undef RAISE_SIGNAL
+        }
     }
 
     return NULL;
