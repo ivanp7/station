@@ -1222,6 +1222,9 @@ static void exit_end_plugin_help_fn_output(void)
         return;
     job_done = true;
 
+    fflush(stdout);
+    fflush(stderr);
+
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
     PRINT(OUTPUT_SEGMENT_END_HELP "\n" COLOR_RESET);
 }
@@ -1232,6 +1235,9 @@ static void exit_end_plugin_conf_fn_output(void)
     if (job_done)
         return;
     job_done = true;
+
+    fflush(stdout);
+    fflush(stderr);
 
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
     PRINT(OUTPUT_SEGMENT_END_CONF "\n" COLOR_RESET);
@@ -1325,6 +1331,9 @@ static int finalize(bool quick)
 
     int exit_code = application.plugin.vtable->func.final(application.plugin.resources, quick);
 
+    fflush(stdout);
+    fflush(stderr);
+
     if (application.verbose)
     {
         PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
@@ -1351,6 +1360,9 @@ static void exit_end_plugin_init_fn_output(void)
         return;
     job_done = true;
 
+    fflush(stdout);
+    fflush(stderr);
+
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
     PRINT(OUTPUT_SEGMENT_END_INIT "\n" COLOR_RESET);
 }
@@ -1361,6 +1373,9 @@ static void exit_end_plugin_exec_fn_output(void)
     if (job_done)
         return;
     job_done = true;
+
+    fflush(stdout);
+    fflush(stderr);
 
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
     PRINT(OUTPUT_SEGMENT_END_EXEC "\n" COLOR_RESET);
