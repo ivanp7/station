@@ -78,7 +78,7 @@ static STATION_PFUNC(pfunc_draw) // implicit arguments: data, task_idx, thread_i
 // State function for the finite state machine
 static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 {
-    printf("sfunc_pre()\n");
+    printf("\nsfunc_pre()\n");
 
     struct plugin_resources *resources = fsm_data;
 
@@ -88,6 +88,7 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
         bool result;
 
         // Stress test of concurrent processing
+        printf("Performing stress-test of concurrent processing...\n");
         for (unsigned i = 0; i < NUM_ITERATIONS; i++)
         {
             if ((i+1) % 1024 == 0)
@@ -135,6 +136,7 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
                 exit(1);
             }
         }
+        printf("Stress-test is complete!\n");
     }
 
     state->sfunc = sfunc_loop;
@@ -329,12 +331,12 @@ static STATION_SFUNC(sfunc_loop_sdl) // implicit arguments: state, fsm_data
 // Plugin help function
 static STATION_PLUGIN_HELP_FUNC(plugin_help) // implicit arguments: argc, argv
 {
-    printf("plugin_help(%i,\n", argc);
+    printf("\nplugin_help(%i,\n", argc);
     for (int i = 0; i < argc; i++)
         printf("  \"%s\",\n", argv[i]);
     printf(")\n");
 
-    printf("Provide a font as the first --file,\n");
+    printf("\nProvide a font as the first --file,\n");
     printf("  give a string as a first plugin argument,\n");
     printf("  and voila -- observe a floating text!\n");
 }
@@ -342,7 +344,7 @@ static STATION_PLUGIN_HELP_FUNC(plugin_help) // implicit arguments: argc, argv
 // Plugin configuration function
 static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, argv
 {
-    printf("plugin_conf(%i,\n", argc);
+    printf("\nplugin_conf(%i,\n", argc);
     for (int i = 0; i < argc; i++)
         printf("  \"%s\",\n", argv[i]);
     printf(")\n");
@@ -367,7 +369,7 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, 
 // Plugin initialization function
 static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outputs
 {
-    printf("plugin_init()\n");
+    printf("\nplugin_init()\n");
 
     struct plugin_resources *resources = malloc(sizeof(*resources));
     if (resources == NULL)
@@ -443,7 +445,7 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
 // Plugin finalization function
 static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_resources, quick
 {
-    printf("plugin_final()\n");
+    printf("\nplugin_final()\n");
 
     struct plugin_resources *resources = plugin_resources;
 

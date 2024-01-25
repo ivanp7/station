@@ -156,8 +156,28 @@
 #define COLOR_OUTPUT_SEGMENT COLOR_FG_BRI_BLACK
 #define COLOR_ERROR COLOR_FG_BRI_RED
 
+#define OUTPUT_SEGMENT_BEGIN_HELP \
+    "↓↓↓································· HELP ·································↓↓↓"
+#define OUTPUT_SEGMENT_END_HELP \
+    "↑↑↑································· HELP ·································↑↑↑"
+#define OUTPUT_SEGMENT_BEGIN_CONF \
+    "↓↓↓···························· CONFIGURATION ·····························↓↓↓"
+#define OUTPUT_SEGMENT_END_CONF \
+    "↑↑↑···························· CONFIGURATION ·····························↑↑↑"
+#define OUTPUT_SEGMENT_BEGIN_INIT \
+    "↓↓↓···························· INITIALIZATION ····························↓↓↓"
+#define OUTPUT_SEGMENT_END_INIT \
+    "↑↑↑···························· INITIALIZATION ····························↑↑↑"
+#define OUTPUT_SEGMENT_BEGIN_EXEC \
+    "↓↓↓······························ EXECUTION ·······························↓↓↓"
+#define OUTPUT_SEGMENT_END_EXEC \
+    "↑↑↑······························ EXECUTION ·······························↑↑↑"
+#define OUTPUT_SEGMENT_BEGIN_FINAL \
+    "↓↓↓····························· FINALIZATION ·····························↓↓↓"
+#define OUTPUT_SEGMENT_END_FINAL \
+    "↑↑↑····························· FINALIZATION ·····························↑↑↑"
 #define OUTPUT_SEGMENT_SEPARATOR \
-    "==============================================================================="
+    "=============================================================================="
 
 #define PRINT(msg) fprintf(stderr, msg)
 #define PRINT_(msg, ...) fprintf(stderr, msg, __VA_ARGS__)
@@ -453,39 +473,45 @@ static void initialize(int argc, char *argv[])
 
     if (application.verbose)
     {
-        PRINT_("Version : " COLOR_VERSION "%u" COLOR_RESET "\n", STATION_PLUGIN_VERSION);
+        {
+            uint32_t version_year = STATION_PLUGIN_VERSION / 10000;
+            uint32_t version_month = (STATION_PLUGIN_VERSION / 100) % 100;
+            uint32_t version_day = STATION_PLUGIN_VERSION % 100;
+            PRINT_("Version: " COLOR_VERSION "%u.%.2u.%.2u" COLOR_RESET "\n\n",
+                    version_year, version_month, version_day);
+        }
 
-        PRINT("Threads : ");
+        PRINT("[");
 #ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-        PRINT(COLOR_FLAG_ON "supported");
+        PRINT(COLOR_FLAG_ON "  supported  ");
 #else
         PRINT(COLOR_FLAG_OFF "not supported");
 #endif
-        PRINT(COLOR_RESET "\n");
+        PRINT(COLOR_RESET "] Concurrent processing\n");
 
-        PRINT("Signals : ");
+        PRINT("[");
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-        PRINT(COLOR_FLAG_ON "supported");
+        PRINT(COLOR_FLAG_ON "  supported  ");
 #else
         PRINT(COLOR_FLAG_OFF "not supported");
 #endif
-        PRINT(COLOR_RESET "\n");
+        PRINT(COLOR_RESET "] Signal management\n");
 
-        PRINT("OpenCL  : ");
+        PRINT("[");
 #ifdef STATION_IS_OPENCL_SUPPORTED
-        PRINT(COLOR_FLAG_ON "supported");
+        PRINT(COLOR_FLAG_ON "  supported  ");
 #else
         PRINT(COLOR_FLAG_OFF "not supported");
 #endif
-        PRINT(COLOR_RESET "\n");
+        PRINT(COLOR_RESET "] OpenCL\n");
 
-        PRINT("SDL     : ");
+        PRINT("[");
 #ifdef STATION_IS_SDL_SUPPORTED
-        PRINT(COLOR_FLAG_ON "supported");
+        PRINT(COLOR_FLAG_ON "  supported  ");
 #else
         PRINT(COLOR_FLAG_OFF "not supported");
 #endif
-        PRINT(COLOR_RESET "\n");
+        PRINT(COLOR_RESET "] SDL\n");
 
         PRINT("\n");
     }
@@ -665,14 +691,14 @@ station-app --cl-list[=TYPE]\n\n");
 
         if (application.plugin.argc > 0)
         {
-            PRINT_("  " COLOR_NUMBER "%i" COLOR_RESET " arguments:\n",
+            PRINT_("  " COLOR_NUMBER "%i" COLOR_RESET " arguments given:\n",
                     application.plugin.argc);
             for (int i = 0; i < application.plugin.argc; i++)
                 PRINT_("    [" COLOR_NUMBER "%i" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n", i, application.plugin.argv[i]);
         }
         else
-            PRINT("  no arguments\n");
+            PRINT("  no arguments given\n");
 
         PRINT("\n");
     }
@@ -759,8 +785,8 @@ station-app --cl-list[=TYPE]\n\n");
     {
         if (application.verbose)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin help >>>\n");
-            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+            PRINT(COLOR_OUTPUT_SEGMENT OUTPUT_SEGMENT_BEGIN_HELP "\n");
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n" COLOR_RESET);
             fflush(stderr);
 
             AT_EXIT(exit_end_plugin_help_fn_output);
@@ -783,8 +809,8 @@ station-app --cl-list[=TYPE]\n\n");
 
     if (application.verbose)
     {
-        PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin configuration >>>\n");
-        PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+        PRINT(COLOR_OUTPUT_SEGMENT OUTPUT_SEGMENT_BEGIN_CONF "\n");
+        PRINT(OUTPUT_SEGMENT_SEPARATOR "\n" COLOR_RESET);
         fflush(stderr);
 
         AT_EXIT(exit_end_plugin_conf_fn_output);
@@ -1197,7 +1223,7 @@ static void exit_end_plugin_help_fn_output(void)
     job_done = true;
 
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-    PRINT("<<< End of plugin help >>>\n" COLOR_RESET);
+    PRINT(OUTPUT_SEGMENT_END_HELP "\n" COLOR_RESET);
 }
 
 static void exit_end_plugin_conf_fn_output(void)
@@ -1208,7 +1234,7 @@ static void exit_end_plugin_conf_fn_output(void)
     job_done = true;
 
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-    PRINT("<<< End of plugin configuration >>>\n" COLOR_RESET);
+    PRINT(OUTPUT_SEGMENT_END_CONF "\n" COLOR_RESET);
 }
 
 /*****************************************************************************/
@@ -1234,8 +1260,8 @@ static int run(void)
 
         if (application.verbose)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin initialization >>>\n");
-            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+            PRINT(COLOR_OUTPUT_SEGMENT OUTPUT_SEGMENT_BEGIN_INIT "\n");
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n" COLOR_RESET);
             fflush(stderr);
 
             AT_EXIT(exit_end_plugin_init_fn_output);
@@ -1262,8 +1288,8 @@ static int run(void)
     {
         if (application.verbose)
         {
-            PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin execution >>>\n");
-            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+            PRINT(COLOR_OUTPUT_SEGMENT OUTPUT_SEGMENT_BEGIN_EXEC "\n");
+            PRINT(OUTPUT_SEGMENT_SEPARATOR "\n" COLOR_RESET);
 
             AT_EXIT(exit_end_plugin_exec_fn_output);
             AT_QUICK_EXIT(exit_end_plugin_exec_fn_output);
@@ -1292,8 +1318,8 @@ static int finalize(bool quick)
 
     if (application.verbose)
     {
-        PRINT(COLOR_OUTPUT_SEGMENT "<<< Beginning of plugin finalization >>>\n");
-        PRINT(OUTPUT_SEGMENT_SEPARATOR "\n\n" COLOR_RESET);
+        PRINT(COLOR_OUTPUT_SEGMENT OUTPUT_SEGMENT_BEGIN_FINAL "\n");
+        PRINT(OUTPUT_SEGMENT_SEPARATOR "\n" COLOR_RESET);
         fflush(stderr);
     }
 
@@ -1302,7 +1328,7 @@ static int finalize(bool quick)
     if (application.verbose)
     {
         PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-        PRINT("<<< End of plugin finalization >>>\n" COLOR_RESET);
+        PRINT(OUTPUT_SEGMENT_END_FINAL "\n" COLOR_RESET);
     }
 
     return exit_code;
@@ -1326,7 +1352,7 @@ static void exit_end_plugin_init_fn_output(void)
     job_done = true;
 
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-    PRINT("<<< End of plugin initialization >>>\n" COLOR_RESET);
+    PRINT(OUTPUT_SEGMENT_END_INIT "\n" COLOR_RESET);
 }
 
 static void exit_end_plugin_exec_fn_output(void)
@@ -1337,7 +1363,7 @@ static void exit_end_plugin_exec_fn_output(void)
     job_done = true;
 
     PRINT(COLOR_OUTPUT_SEGMENT "\n" OUTPUT_SEGMENT_SEPARATOR "\n");
-    PRINT("<<< End of plugin execution >>>\n" COLOR_RESET);
+    PRINT(OUTPUT_SEGMENT_END_EXEC "\n" COLOR_RESET);
 }
 
 /*****************************************************************************/

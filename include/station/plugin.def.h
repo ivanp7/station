@@ -33,7 +33,7 @@
 /**
  * @brief Plugin version - value determining application-plugin compatibility.
  */
-#define STATION_PLUGIN_VERSION 20240123
+#define STATION_PLUGIN_VERSION 20240125
 
 /**
  * @brief Name of plugin vtable structure object.
