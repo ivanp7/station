@@ -671,12 +671,7 @@ station-app --cl-list[=TYPE]\n\n");
     ////////////////////////////////////////
 
     if (!application.plugin.built_in && (application.args.inputs_num == 0))
-    {
-        if (application.verbose)
-            PRINT("Plugin file is not specified, exiting.\n");
-
         exit(EXIT_SUCCESS);
-    }
 
     ///////////////////////////////////////
     // Display plugin file and arguments //
