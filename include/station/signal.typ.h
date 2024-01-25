@@ -33,27 +33,50 @@
 #include <stdbool.h>
 
 /**
- * @brief Set of supported signals.
+ * @brief Set of supported standard signals.
  */
-typedef struct station_signal_set {
+typedef struct station_std_signal_set {
 #ifndef __STDC_NO_ATOMICS__
-    atomic_bool signal_SIGALRM;
-    atomic_bool signal_SIGCHLD;
-    atomic_bool signal_SIGCONT;
-    atomic_bool signal_SIGHUP;
     atomic_bool signal_SIGINT;
     atomic_bool signal_SIGQUIT;
     atomic_bool signal_SIGTERM;
+
+    atomic_bool signal_SIGCHLD;
+    atomic_bool signal_SIGCONT;
     atomic_bool signal_SIGTSTP;
+    atomic_bool signal_SIGXCPU;
+    atomic_bool signal_SIGXFSZ;
+
+    atomic_bool signal_SIGPIPE;
+    atomic_bool signal_SIGPOLL;
+    atomic_bool signal_SIGURG;
+
+    atomic_bool signal_SIGALRM;
+    atomic_bool signal_SIGVTALRM;
+    atomic_bool signal_SIGPROF;
+
+    atomic_bool signal_SIGHUP;
     atomic_bool signal_SIGTTIN;
     atomic_bool signal_SIGTTOU;
+    atomic_bool signal_SIGWINCH;
+
     atomic_bool signal_SIGUSR1;
     atomic_bool signal_SIGUSR2;
-    atomic_bool signal_SIGWINCH;
 #else
     int dummy;
 #endif
-} station_signal_set_t;
+} station_std_signal_set_t;
+
+/**
+ * @brief Set of real-time signals.
+ */
+typedef struct station_rt_signal_set {
+#ifndef __STDC_NO_ATOMICS__
+    atomic_bool *signal_SIGRTMIN; ///< Array of RT signal flags of size (SIGRTMAX-SIGRTMIN+1).
+#else
+    int dummy;
+#endif
+} station_rt_signal_set_t;
 
 /**
  * @brief Signal handler.
@@ -67,8 +90,9 @@ typedef bool (*station_signal_handler_func_t)(
         int signo,     ///< [in] Signal number.
         void *siginfo, ///< [in] Pointer to siginfo_t data structure.
 
-        station_signal_set_t *signal_states, ///< [in,out] States of signals.
-        void *data                           ///< [in,out] Handler data.
+        station_std_signal_set_t *std_signals, ///< [in,out] States of standard signals.
+        station_rt_signal_set_t *rt_signals,   ///< [in,out] States of real-time signals.
+        void *data                             ///< [in,out] Handler data.
 );
 
 #endif // _STATION_SIGNAL_TYP_H_

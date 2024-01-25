@@ -50,7 +50,8 @@ struct station_signal_management_context;
  */
 struct station_signal_management_context*
 station_signal_management_thread_start(
-        station_signal_set_t *signals, ///< [in,out] Set of signals to watch.
+        station_std_signal_set_t *std_signals, ///< [in,out] Standard signals to catch.
+        station_rt_signal_set_t *rt_signals,   ///< [in,out] Real-time signals to catch.
         station_signal_handler_func_t signal_handler, ///< [in] Signal handler.
         void *signal_handler_data ///< [in] Signal handler data.
 );

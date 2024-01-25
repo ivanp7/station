@@ -68,50 +68,62 @@ so that the latter becomes a standalone application.
 ## Contents of `station-app --help`
 
 ```
-station-app [options...] PLUGIN_FILE [-- [plugin options...]]
-    or
-station-app --help [PLUGIN_FILE [-- [plugin help options...]]]
-    or
-station-app --cl-list[=TYPE]
+station-app [options...] [PLUGIN_FILE [-- [plugin options...]]]
 
 Usage:
 
-  -C, --conf=FILE               (multiple) Parse arguments from file
-
-Alternative modes:
-  -h, --help                    Display usage help for app or plugin
-  -l, --cl-list[=TYPE]          Display list of OpenCL-compatible hardware
-                                  (possible values="platforms", "devices"
-                                  default=`devices')
+  -A, --argfile=FILE            Parse arguments from file
 
 Output options:
   -v, --verbose                 Display more information
-  -i, --logo                    Display application logo
+  -V, --logo                    Display application logo
 
-Execution options:
-  -j, --threads=[-]THREADS      (multiple) Create concurrent processing
-                                  context, negative means busy-wait
-  -c, --cl-context=PLATFORM_IDX[:DEVICE_IDX_MASK]
-                                (multiple) Create OpenCL context
+Alternative mode options:
+  -h, --help                    Display usage help for app or plugin
+  -C, --cl-list=TYPE            Display list of OpenCL-compatible hardware
+                                  (possible values="platforms", "devices")
+
+Feature options:
+  -f, --file=FILE               Create data buffer from file
+  -j, --threads=[±]THREADS      Create concurrent processing context
+                                  (+: wait on condition variable, -: busy-wait)
+  -c, --cl-context=PID[:DMASK]  Create OpenCL context
+                                  (PID: platform index, DMASK: device mask)
   -n, --no-sdl                  Don't initialize SDL subsystems
 
-Data options:
-  -f, --file=FILE               (multiple) Create data buffer from file
+Signal management (interruption requests):
+      --SIGINT                  Catch <interruption request>
+      --SIGQUIT                 Catch <quit request>
+      --SIGTERM                 Catch <termination request>
 
-Signal management:
-      --SIGALRM                 Watch signal
-      --SIGCHLD                 Watch signal
-      --SIGCONT                 Watch signal
-      --SIGHUP                  Watch signal
-      --SIGINT                  Watch signal
-      --SIGQUIT                 Watch signal
-      --SIGTERM                 Watch signal
-      --SIGTSTP                 Watch signal
-      --SIGTTIN                 Watch signal
-      --SIGTTOU                 Watch signal
-      --SIGUSR1                 Watch signal
-      --SIGUSR2                 Watch signal
-      --SIGWINCH                Watch signal
+Signal management (process events):
+      --SIGCHLD                 Catch <child stopped or terminated>
+      --SIGCONT                 Catch <continue if stopped>
+      --SIGTSTP                 Catch <stop request>
+      --SIGXCPU                 Catch <CPU time limit exceeded>
+      --SIGXFSZ                 Catch <file size limit exceeded>
+
+Signal management (input/output events):
+      --SIGPIPE                 Catch <broken pipe>
+      --SIGPOLL                 Catch <pollable event>
+      --SIGURG                  Catch <urgent condition on socket>
+
+Signal management (timer events):
+      --SIGALRM                 Catch <timer signal from alarm>
+      --SIGVTALRM               Catch <virtual alarm clock>
+      --SIGPROF                 Catch <profiling timer expired>
+
+Signal management (terminal events):
+      --SIGHUP                  Catch <terminal hangup>
+      --SIGTTIN                 Catch <terminal input for background process>
+      --SIGTTOU                 Catch <terminal output for background process>
+      --SIGWINCH                Catch <terminal resized>
+
+Signal management (user-defined):
+      --SIGUSR1                 Catch <user-defined signal 1>
+      --SIGUSR2                 Catch <user-defined signal 2>
+      --SIGRTMIN=+n             Catch <real-time signal MIN+n>
+      --SIGRTMAX=-n             Catch <real-time signal MAX-n>
 ```
 
 ## How to build

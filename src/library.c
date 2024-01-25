@@ -707,7 +707,8 @@ struct station_signal_management_context
     pthread_t thread;
     sigset_t set;
 
-    station_signal_set_t *signals;
+    station_std_signal_set_t *std_signals;
+    station_rt_signal_set_t *rt_signals;
     station_signal_handler_func_t handler;
     void *handler_data;
 
@@ -728,34 +729,54 @@ station_signal_management_thread(
     while (!atomic_load_explicit(&context->terminate, memory_order_relaxed))
     {
         int signal = sigtimedwait(&context->set, &siginfo, &delay);
+        if (signal <= 0)
+            continue;
 
         bool set_flag = true;
+        if (context->handler != NULL)
+            set_flag = context->handler(signal, &siginfo,
+                    context->std_signals, context->rt_signals, context->handler_data);
+
         switch (signal)
         {
-#define RAISE_SIGNAL(signal)                                                        \
-            case signal:                                                            \
-                if (context->handler != NULL)                                       \
-                    set_flag = context->handler(signal, &siginfo,                   \
-                            context->signals, context->handler_data);               \
-                if (set_flag)                                                       \
-                    STATION_SIGNAL_SET_FLAG(&context->signals->signal_##signal);    \
+#define CASE_SIGNAL(signal)                                                             \
+            case signal:                                                                \
+                if (set_flag)                                                           \
+                    STATION_SIGNAL_SET_FLAG(&context->std_signals->signal_##signal);    \
+                break
+
+            CASE_SIGNAL(SIGINT);
+            CASE_SIGNAL(SIGQUIT);
+            CASE_SIGNAL(SIGTERM);
+
+            CASE_SIGNAL(SIGCHLD);
+            CASE_SIGNAL(SIGCONT);
+            CASE_SIGNAL(SIGTSTP);
+            CASE_SIGNAL(SIGXCPU);
+            CASE_SIGNAL(SIGXFSZ);
+
+            CASE_SIGNAL(SIGPIPE);
+            CASE_SIGNAL(SIGPOLL);
+            CASE_SIGNAL(SIGURG);
+
+            CASE_SIGNAL(SIGALRM);
+            CASE_SIGNAL(SIGVTALRM);
+            CASE_SIGNAL(SIGPROF);
+
+            CASE_SIGNAL(SIGHUP);
+            CASE_SIGNAL(SIGTTIN);
+            CASE_SIGNAL(SIGTTOU);
+            CASE_SIGNAL(SIGWINCH);
+
+            CASE_SIGNAL(SIGUSR1);
+            CASE_SIGNAL(SIGUSR2);
+
+#undef CASE_SIGNAL
+
+            default:
+                if ((signal >= SIGRTMIN) && (signal <= SIGRTMAX) && set_flag)
+                    STATION_SIGNAL_SET_FLAG(&context->rt_signals->signal_SIGRTMIN[signal - SIGRTMIN]);
                 break;
-
-            RAISE_SIGNAL(SIGALRM)
-            RAISE_SIGNAL(SIGCHLD)
-            RAISE_SIGNAL(SIGCONT)
-            RAISE_SIGNAL(SIGHUP)
-            RAISE_SIGNAL(SIGINT)
-            RAISE_SIGNAL(SIGQUIT)
-            RAISE_SIGNAL(SIGTERM)
-            RAISE_SIGNAL(SIGTSTP)
-            RAISE_SIGNAL(SIGTTIN)
-            RAISE_SIGNAL(SIGTTOU)
-            RAISE_SIGNAL(SIGUSR1)
-            RAISE_SIGNAL(SIGUSR2)
-            RAISE_SIGNAL(SIGWINCH)
-
-#undef RAISE_SIGNAL
         }
     }
 
@@ -766,55 +787,83 @@ station_signal_management_thread(
 
 struct station_signal_management_context*
 station_signal_management_thread_start(
-        station_signal_set_t *signals,
+        station_std_signal_set_t *std_signals,
+        station_rt_signal_set_t *rt_signals,
         station_signal_handler_func_t signal_handler,
         void *signal_handler_data)
 {
 #ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-    (void) signals;
+    (void) std_signals;
+    (void) rt_signals;
     (void) signal_handler;
     (void) signal_handler_data;
 
     return NULL;
 #else
-    if (signals == NULL)
-        return NULL;
-
     struct station_signal_management_context *context = malloc(sizeof(*context));
     if (context == NULL)
         return NULL;
 
     sigemptyset(&context->set);
 
-#define ADD_SIGNAL(signal)                  \
-    if (signals->signal_##signal) {         \
-        signals->signal_##signal = false;   \
-        sigaddset(&context->set, signal); }
-
-    ADD_SIGNAL(SIGALRM)
-    ADD_SIGNAL(SIGCHLD)
-    ADD_SIGNAL(SIGCONT)
-    ADD_SIGNAL(SIGHUP)
-    ADD_SIGNAL(SIGINT)
-    ADD_SIGNAL(SIGQUIT)
-    ADD_SIGNAL(SIGTERM)
-    ADD_SIGNAL(SIGTSTP)
-    ADD_SIGNAL(SIGTTIN)
-    ADD_SIGNAL(SIGTTOU)
-    ADD_SIGNAL(SIGUSR1)
-    ADD_SIGNAL(SIGUSR2)
-    ADD_SIGNAL(SIGWINCH)
-
-#undef ADD_SIGNAL
-
-    if (pthread_sigmask(SIG_BLOCK, &context->set, (sigset_t*)NULL) != 0)
-        return NULL;
-
-    context->signals = signals;
+    context->std_signals = std_signals;
+    context->rt_signals = rt_signals;
     context->handler = signal_handler;
     context->handler_data = signal_handler_data;
 
     atomic_init(&context->terminate, false);
+
+    if (std_signals != NULL)
+    {
+#define ADD_SIGNAL(signal) do {                     \
+        if (std_signals->signal_##signal) {         \
+            std_signals->signal_##signal = false;   \
+            sigaddset(&context->set, signal); } } while (0)
+
+        ADD_SIGNAL(SIGINT);
+        ADD_SIGNAL(SIGQUIT);
+        ADD_SIGNAL(SIGTERM);
+
+        ADD_SIGNAL(SIGCHLD);
+        ADD_SIGNAL(SIGCONT);
+        ADD_SIGNAL(SIGTSTP);
+        ADD_SIGNAL(SIGXCPU);
+        ADD_SIGNAL(SIGXFSZ);
+
+        ADD_SIGNAL(SIGPIPE);
+        ADD_SIGNAL(SIGPOLL);
+        ADD_SIGNAL(SIGURG);
+
+        ADD_SIGNAL(SIGALRM);
+        ADD_SIGNAL(SIGVTALRM);
+        ADD_SIGNAL(SIGPROF);
+
+        ADD_SIGNAL(SIGHUP);
+        ADD_SIGNAL(SIGTTIN);
+        ADD_SIGNAL(SIGTTOU);
+        ADD_SIGNAL(SIGWINCH);
+
+        ADD_SIGNAL(SIGUSR1);
+        ADD_SIGNAL(SIGUSR2);
+
+#undef ADD_SIGNAL
+    }
+
+    if (rt_signals != NULL)
+    {
+        for (int signal = SIGRTMIN; signal <= SIGRTMAX; signal++)
+            if (rt_signals->signal_SIGRTMIN[signal - SIGRTMIN])
+            {
+                rt_signals->signal_SIGRTMIN[signal - SIGRTMIN] = false;
+                sigaddset(&context->set, signal);
+            }
+    }
+
+    if (pthread_sigmask(SIG_BLOCK, &context->set, (sigset_t*)NULL) != 0)
+    {
+        free(context);
+        return NULL;
+    }
 
     if (pthread_create(&context->thread, NULL, station_signal_management_thread, context) != 0)
     {

@@ -4,7 +4,6 @@
 #include <station/buffer.typ.h>
 
 #include <station/signal.typ.h>
-#include <station/signal.def.h>
 
 #include <station/concurrent.fun.h>
 #include <station/sdl.fun.h>
@@ -13,8 +12,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdatomic.h>
+#include <signal.h>
 #include <unistd.h> // for alarm()
 
+
+// Signal handler function
+static STATION_SIGNAL_HANDLER_FUNC(signal_handler) // implicit arguments: signo, siginfo, std_signals, rt_signals, data
+{
+    (void) siginfo;
+    (void) std_signals;
+    (void) rt_signals;
+    (void) data;
+
+    if ((signo >= SIGRTMIN) && (signo <= SIGRTMAX))
+    {
+        if (signo <= SIGRTMIN + (SIGRTMAX-SIGRTMIN)/2)
+            printf("Caught real-time signal SIGRTMIN%+i!\n", signo - SIGRTMIN);
+        else
+            printf("Caught real-time signal SIGRTMAX%+i!\n", signo - SIGRTMAX);
+    }
+
+    return true;
+}
 
 // Concurrent processing callback function
 static STATION_PFUNC_CALLBACK(pfunc_cb_flag) // implicit arguments: data, thread_idx
@@ -146,34 +165,33 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 static STATION_SFUNC(sfunc_loop) // implicit arguments: state, fsm_data
 {
     struct plugin_resources *resources = fsm_data;
-    station_signal_set_t *signals = resources->signals;
 
     // Check if caught any of the signals
-    if (STATION_SIGNAL_IS_FLAG_SET(&signals->signal_SIGINT))
+    if (STATION_SIGNAL_IS_FLAG_SET(&resources->std_signals->signal_SIGINT))
     {
         printf("Caught SIGINT, bye!\n");
         // Exit normally
         state->sfunc = NULL;
         return;
     }
-    else if (STATION_SIGNAL_IS_FLAG_SET(&signals->signal_SIGQUIT))
+    else if (STATION_SIGNAL_IS_FLAG_SET(&resources->std_signals->signal_SIGQUIT))
     {
         printf("Caught SIGQUIT, bye!\n");
         // Exit by quick_exit()
         quick_exit(EXIT_SUCCESS);
     }
-    else if (STATION_SIGNAL_IS_FLAG_SET(&signals->signal_SIGTERM))
+    else if (STATION_SIGNAL_IS_FLAG_SET(&resources->std_signals->signal_SIGTERM))
     {
         printf("Caught SIGTERM, bye!\n");
         // Exit by exit()
         exit(EXIT_SUCCESS);
     }
 
-    if (STATION_SIGNAL_IS_FLAG_SET(&signals->signal_SIGTSTP))
+    if (STATION_SIGNAL_IS_FLAG_SET(&resources->std_signals->signal_SIGTSTP))
     {
         printf("Caught SIGTSTP.\n");
         // Unset the signal flag
-        STATION_SIGNAL_UNSET_FLAG(&signals->signal_SIGTSTP);
+        STATION_SIGNAL_UNSET_FLAG(&resources->std_signals->signal_SIGTSTP);
 
         if (!resources->alarm_set)
         {
@@ -186,11 +204,11 @@ static STATION_SFUNC(sfunc_loop) // implicit arguments: state, fsm_data
         }
     }
 
-    if (STATION_SIGNAL_IS_FLAG_SET(&signals->signal_SIGALRM))
+    if (STATION_SIGNAL_IS_FLAG_SET(&resources->std_signals->signal_SIGALRM))
     {
         printf("Caught SIGALRM.\n");
         // Unset the signal flag
-        STATION_SIGNAL_UNSET_FLAG(&signals->signal_SIGALRM);
+        STATION_SIGNAL_UNSET_FLAG(&resources->std_signals->signal_SIGALRM);
 
         if (resources->alarm_set)
         {
@@ -353,9 +371,13 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, 
         args->cmdline = argv[1]; // first argument will be draw as a floating text
 
     // Catch the following signals
-    args->signals_used->signal_SIGINT = true;
-    args->signals_used->signal_SIGQUIT = true;
-    args->signals_used->signal_SIGTERM = true;
+    args->std_signals_used->signal_SIGINT = true;
+    args->std_signals_used->signal_SIGQUIT = true;
+    args->std_signals_used->signal_SIGTERM = true;
+    for (int i = 0; i <= SIGRTMAX-SIGRTMIN; i++)
+        args->rt_signals_used->signal_SIGRTMIN[i] = true;
+    args->signal_handler = signal_handler;
+
     args->num_files_used = 1;
     args->num_concurrent_processing_contexts_used = 1;
     args->num_opencl_contexts_used = -1; // allow any number of contexts to be created
@@ -383,7 +405,8 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
     outputs->fsm_initial_state.sfunc = sfunc_pre; // begin FSM execution from sfunc_pre()
     outputs->fsm_data = resources;
 
-    resources->signals = inputs->signal_states;
+    resources->std_signals = inputs->std_signals;
+    resources->rt_signals = inputs->rt_signals;
 
     if (inputs->concurrent_processing_contexts->num_contexts > 0)
         resources->concurrent_processing_context = &inputs->concurrent_processing_contexts->contexts[0];

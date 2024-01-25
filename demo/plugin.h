@@ -2,6 +2,7 @@
 
 #include <station/plugin.def.h>
 #include <station/fsm.def.h>
+#include <station/signal.def.h>
 #include <station/concurrent.def.h>
 #include <station/concurrent.typ.h>
 #include <station/sdl.typ.h>
@@ -33,7 +34,8 @@ struct station_state;
 
 // Plugin's own resources
 struct plugin_resources {
-    struct station_signal_set *signals; // signal flags
+    struct station_std_signal_set *std_signals; // standard signals flags
+    struct station_rt_signal_set *rt_signals;   // real-time signals flags
 
     station_concurrent_processing_context_t
         *concurrent_processing_context; // for multithreaded rendering
@@ -57,6 +59,9 @@ struct plugin_resources {
     unsigned prev_frame, frame;
 };
 
+
+// Signal handler function
+static STATION_SIGNAL_HANDLER_FUNC(signal_handler);
 
 // Concurrent processing functions
 static STATION_PFUNC_CALLBACK(pfunc_cb_flag);

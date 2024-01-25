@@ -47,21 +47,33 @@
 /**
  * @brief Signal set with all flags raised.
  */
-#define STATION_SIGNAL_SET_ALL      \
-    (station_signal_set_t){         \
-        .signal_SIGALRM = true,     \
-        .signal_SIGCHLD = true,     \
-        .signal_SIGCONT = true,     \
-        .signal_SIGHUP = true,      \
+#define STATION_STD_SIGNAL_SET_ALL  \
+    (station_std_signal_set_t){     \
         .signal_SIGINT = true,      \
         .signal_SIGQUIT = true,     \
         .signal_SIGTERM = true,     \
+                                    \
+        .signal_SIGCHLD = true,     \
+        .signal_SIGCONT = true,     \
         .signal_SIGTSTP = true,     \
+        .signal_SIGXCPU = true,     \
+        .signal_SIGXFSZ = true,     \
+                                    \
+        .signal_SIGPIPE = true,     \
+        .signal_SIGPOLL = true,     \
+        .signal_SIGURG = true,      \
+                                    \
+        .signal_SIGALRM = true,     \
+        .signal_SIGVTALRM = true,   \
+        .signal_SIGPROF = true,     \
+                                    \
+        .signal_SIGHUP = true,      \
         .signal_SIGTTIN = true,     \
         .signal_SIGTTOU = true,     \
+        .signal_SIGWINCH = true,    \
+                                    \
         .signal_SIGUSR1 = true,     \
         .signal_SIGUSR2 = true,     \
-        .signal_SIGWINCH = true,    \
     }
 
 /**
@@ -69,8 +81,11 @@
  *
  * @see station_signal_handler_func_t
  */
-#define STATION_SIGNAL_HANDLER_FUNC(name) \
-    bool name(int signo, void *siginfo, struct station_signal_set *signal_states, void *data)
+#define STATION_SIGNAL_HANDLER_FUNC(name)               \
+    bool name(int signo, void *siginfo,                 \
+            struct station_std_signal_set *std_signals, \
+            struct station_rt_signal_set *rt_signals,   \
+            void *data)
 
 #endif // _STATION_SIGNAL_DEF_H_
 

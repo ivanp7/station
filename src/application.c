@@ -35,6 +35,15 @@
 #  include <dlfcn.h>
 #endif
 
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+#  include <threads.h>
+#  include <stdatomic.h>
+#endif
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+#  include <signal.h>
+#endif
+
 #ifdef STATION_IS_OPENCL_SUPPORTED
 #  include <CL/cl.h>
 #endif
@@ -60,7 +69,7 @@
 #include <station/buffer.fun.h>
 #include <station/buffer.typ.h>
 
-#include "application_args.h"
+#include "application.args.h"
 
 /*****************************************************************************/
 
@@ -199,6 +208,15 @@
         func();                                         \
         exit(STATION_APP_ERROR_ATEXIT); } } while (0)
 
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+#  define EXIT_ASSERT_MAIN_THREAD() do {                        \
+    if (!thrd_equal(thrd_current(), application.main_thread)) { \
+        ERROR("calling exit() or quick_exit() not from the main thread is forbidden");  \
+        abort(); } } while (0)
+#else
+#  define EXIT_ASSERT_MAIN_THREAD()
+#endif
+
 #define STRINGIFY(obj) STRING_OF(obj)
 #define STRING_OF(obj) #obj
 
@@ -224,7 +242,8 @@ static struct {
     station_buffers_array_t files;
 
     struct {
-        station_signal_set_t set;
+        station_std_signal_set_t std_set;
+        station_rt_signal_set_t rt_set;
         bool management_used;
         struct station_signal_management_context *management_context;
     } signal;
@@ -251,6 +270,10 @@ static struct {
         void *data;
     } fsm;
 
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    thrd_t main_thread;
+#endif
+
     bool print_final_message;
     bool end_of_main_reached;
 } application;
@@ -271,7 +294,7 @@ static void exit_unload_plugin(void);
 static void exit_stop_signal_management_thread(void);
 #endif
 
-static void exit_stop_threads(void);
+static void exit_destroy_concurrent_processing_contexts(void);
 
 #ifdef STATION_IS_SDL_SUPPORTED
 static void exit_quit_sdl(void);
@@ -301,7 +324,7 @@ static void display_opencl_listing(void);
 
 static void prepare_opencl_tmp_arrays(void);
 static void create_opencl_contexts(void);
-static void release_opencl_tmp_arrays(void);
+static void free_opencl_tmp_arrays(void);
 
 static void exit_release_opencl_contexts(void);
 static void exit_release_opencl_contexts_quick(void);
@@ -310,8 +333,9 @@ static void exit_release_opencl_contexts_quick(void);
 
 /*****************************************************************************/
 
-static void exit_print_final_message(void);
-static void exit_print_final_message_quick(void);
+static void initialize_static_data(void);
+
+static void exit_finalize_static_data(void);
 
 enum termination_reason {
     TR_MAIN,
@@ -320,6 +344,9 @@ enum termination_reason {
 };
 
 static void print_final_message(enum termination_reason reason);
+
+static void exit_print_final_message(void);
+static void exit_print_final_message_quick(void);
 
 int
 station_app_main(
@@ -339,6 +366,10 @@ station_app_main(
     AT_EXIT(exit_print_final_message);
     AT_QUICK_EXIT(exit_print_final_message_quick);
 
+    initialize_static_data();
+
+    AT_EXIT(exit_finalize_static_data);
+
     initialize(argc, argv);
 
     if (application.verbose)
@@ -348,6 +379,35 @@ station_app_main(
 
     application.end_of_main_reached = true;
     return exit_code;
+}
+
+static void initialize_static_data(void)
+{
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    application.main_thread = thrd_current();
+#endif
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    application.signal.rt_set.signal_SIGRTMIN = malloc(
+            sizeof(*application.signal.rt_set.signal_SIGRTMIN) * (SIGRTMAX-SIGRTMIN+1));
+    if (application.signal.rt_set.signal_SIGRTMIN == NULL)
+    {
+        ERROR("couldn't allocate array of real-time signal flags");
+        exit(STATION_APP_ERROR_MALLOC);
+    }
+
+    for (int i = 0; i <= SIGRTMAX-SIGRTMIN; i++)
+        atomic_init(&application.signal.rt_set.signal_SIGRTMIN[i], false);
+#endif
+}
+
+static void exit_finalize_static_data(void)
+{
+    EXIT_ASSERT_MAIN_THREAD();
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    free(application.signal.rt_set.signal_SIGRTMIN);
+#endif
 }
 
 static void print_final_message(enum termination_reason reason)
@@ -374,12 +434,16 @@ static void print_final_message(enum termination_reason reason)
 
 static void exit_print_final_message(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     if (application.print_final_message)
         print_final_message(application.end_of_main_reached ? TR_MAIN : TR_EXIT);
 }
 
 static void exit_print_final_message_quick(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     if (application.print_final_message)
         print_final_message(TR_QUICK_EXIT);
 }
@@ -433,13 +497,13 @@ static void initialize(int argc, char *argv[])
         params.check_ambiguity = 0;
         params.print_errors = 1;
 
-        for (unsigned i = 0; i < application.args.conf_given; i++)
+        for (unsigned i = 0; i < application.args.argfile_given; i++)
         {
-            if (args_parser_config_file(application.args.conf_arg[i],
+            if (args_parser_config_file(application.args.argfile_arg[i],
                         &application.args, &params) != 0)
             {
                 ERROR_("couldn't parse arguments from file "
-                        COLOR_STRING "%s" COLOR_RESET, application.args.conf_arg[i]);
+                        COLOR_STRING "%s" COLOR_RESET, application.args.argfile_arg[i]);
                 exit(STATION_APP_ERROR_ARGUMENTS);
             }
         }
@@ -565,6 +629,44 @@ static void initialize(int argc, char *argv[])
             exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+        for (unsigned i = 0; i < application.args.SIGRTMIN_given; i++)
+        {
+            int signal = application.args.SIGRTMIN_arg[i];
+
+            if (signal < 0)
+            {
+                ERROR_("real-time signal number can't be less than SIGRTMIN (argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "])", i);
+                exit(STATION_APP_ERROR_ARGUMENTS);
+            }
+            else if (signal + SIGRTMIN > SIGRTMAX)
+            {
+                ERROR_("real-time signal number SIGRTMIN%+i (argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "]) is greater than SIGRTMAX", signal, i);
+                exit(STATION_APP_ERROR_ARGUMENTS);
+            }
+        }
+
+        for (unsigned i = 0; i < application.args.SIGRTMAX_given; i++)
+        {
+            int signal = application.args.SIGRTMAX_arg[i];
+
+            if (signal > 0)
+            {
+                ERROR_("real-time signal number can't be greater than SIGRTMAX (argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "])", i);
+                exit(STATION_APP_ERROR_ARGUMENTS);
+            }
+            else if (signal + SIGRTMAX < SIGRTMIN)
+            {
+                ERROR_("real-time signal number SIGRTMAX%+i (argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "]) is less than SIGRTMIN", signal, i);
+                exit(STATION_APP_ERROR_ARGUMENTS);
+            }
+        }
+#endif
+
 #ifdef STATION_IS_OPENCL_SUPPORTED
         for (unsigned i = 0; i < application.args.cl_context_given; i++)
         {
@@ -642,7 +744,7 @@ static void initialize(int argc, char *argv[])
         }
         else
         {
-            PRINT_("\n%s [options...] [-- [custom options...]]\n\n",
+            PRINT_("\n%s [app options...] [-- [options...]]\n\n",
                     application.plugin.vtable->info.name);
             args_parser_print_help();
             PRINT("\n");
@@ -770,7 +872,8 @@ static void initialize(int argc, char *argv[])
     // Call plugin configuration function //
     ////////////////////////////////////////
 
-    application.plugin.configuration.signals_used = &application.signal.set;
+    application.plugin.configuration.std_signals_used = &application.signal.std_set;
+    application.plugin.configuration.rt_signals_used = &application.signal.rt_set;
 
     if (application.verbose)
     {
@@ -793,30 +896,55 @@ static void initialize(int argc, char *argv[])
     ///////////////////////////////////
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-#  define WATCH_SIGNAL(signame) do {                    \
-    if (application.args.signame##_given) {             \
-        application.signal.set.signal_##signame = true; \
-        application.signal.management_used = true;      \
-    } else if (application.signal.set.signal_##signame) \
-        application.signal.management_used = true; } while (0);
+#  define CATCH_SIGNAL(signame) do {                        \
+    if (application.args.signame##_given) {                 \
+        application.signal.std_set.signal_##signame = true; \
+        application.signal.management_used = true;          \
+    } else if (application.signal.std_set.signal_##signame) \
+        application.signal.management_used = true; } while (0)
 
-    WATCH_SIGNAL(SIGALRM)
-    WATCH_SIGNAL(SIGCHLD)
-    WATCH_SIGNAL(SIGCONT)
-    WATCH_SIGNAL(SIGHUP)
-    WATCH_SIGNAL(SIGINT)
-    WATCH_SIGNAL(SIGQUIT)
-    WATCH_SIGNAL(SIGTERM)
-    WATCH_SIGNAL(SIGTSTP)
-    WATCH_SIGNAL(SIGTTIN)
-    WATCH_SIGNAL(SIGTTOU)
-    WATCH_SIGNAL(SIGUSR1)
-    WATCH_SIGNAL(SIGUSR2)
-    WATCH_SIGNAL(SIGWINCH)
+    CATCH_SIGNAL(SIGINT);
+    CATCH_SIGNAL(SIGQUIT);
+    CATCH_SIGNAL(SIGTERM);
 
-#  undef WATCH_SIGNAL
-#else
-    application.signal.management_used = false;
+    CATCH_SIGNAL(SIGCHLD);
+    CATCH_SIGNAL(SIGCONT);
+    CATCH_SIGNAL(SIGTSTP);
+    CATCH_SIGNAL(SIGXCPU);
+    CATCH_SIGNAL(SIGXFSZ);
+
+    CATCH_SIGNAL(SIGPIPE);
+    CATCH_SIGNAL(SIGPOLL);
+    CATCH_SIGNAL(SIGURG);
+
+    CATCH_SIGNAL(SIGALRM);
+    CATCH_SIGNAL(SIGVTALRM);
+    CATCH_SIGNAL(SIGPROF);
+
+    CATCH_SIGNAL(SIGHUP);
+    CATCH_SIGNAL(SIGTTIN);
+    CATCH_SIGNAL(SIGTTOU);
+    CATCH_SIGNAL(SIGWINCH);
+
+    CATCH_SIGNAL(SIGUSR1);
+    CATCH_SIGNAL(SIGUSR2);
+
+#  undef CATCH_SIGNAL
+
+    for (unsigned i = 0; i < application.args.SIGRTMIN_given; i++)
+        application.signal.rt_set.signal_SIGRTMIN[application.args.SIGRTMIN_arg[i]] = true;
+
+    for (unsigned i = 0; i < application.args.SIGRTMAX_given; i++)
+        application.signal.rt_set.signal_SIGRTMIN[application.args.SIGRTMAX_arg[i] + SIGRTMAX-SIGRTMIN] = true;
+
+    if (application.args.SIGRTMIN_given || application.args.SIGRTMAX_given)
+        application.signal.management_used = true;
+
+    for (int i = 0; i <= SIGRTMAX-SIGRTMIN; i++)
+    {
+        if (application.signal.rt_set.signal_SIGRTMIN[i])
+            application.signal.management_used = true;
+    }
 #endif
 
     application.concurrent_processing.contexts.num_contexts =
@@ -829,8 +957,6 @@ static void initialize(int argc, char *argv[])
         application.plugin.configuration.num_opencl_contexts_used;
     if (application.opencl.contexts.num_contexts > application.args.cl_context_given)
         application.opencl.contexts.num_contexts = application.args.cl_context_given;
-#else
-    application.plugin.configuration.num_opencl_contexts_used = 0;
 #endif
 
 #ifdef STATION_IS_SDL_SUPPORTED
@@ -852,32 +978,67 @@ static void initialize(int argc, char *argv[])
     {
         PRINT("\n");
 
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
         if (application.signal.management_used)
         {
-            PRINT("Signals:");
+            PRINT("Standard signals:");
 
-#define PRINT_SIGNAL(signame)                               \
-            if (application.signal.set.signal_##signame)    \
-                PRINT_(" " COLOR_SIGNAL "%s" COLOR_RESET, #signame + 3);
+#  define PRINT_SIGNAL(signame) do {                            \
+            if (application.signal.std_set.signal_##signame)    \
+                PRINT_(" " COLOR_SIGNAL "%s" COLOR_RESET, #signame + 3); } while (0)
 
-            PRINT_SIGNAL(SIGALRM)
-            PRINT_SIGNAL(SIGCHLD)
-            PRINT_SIGNAL(SIGCONT)
-            PRINT_SIGNAL(SIGHUP)
-            PRINT_SIGNAL(SIGINT)
-            PRINT_SIGNAL(SIGQUIT)
-            PRINT_SIGNAL(SIGTERM)
-            PRINT_SIGNAL(SIGTSTP)
-            PRINT_SIGNAL(SIGTTIN)
-            PRINT_SIGNAL(SIGTTOU)
-            PRINT_SIGNAL(SIGUSR1)
-            PRINT_SIGNAL(SIGUSR2)
-            PRINT_SIGNAL(SIGWINCH)
+            PRINT_SIGNAL(SIGINT);
+            PRINT_SIGNAL(SIGQUIT);
+            PRINT_SIGNAL(SIGTERM);
 
-#undef PRINT_SIGNAL
+            PRINT_SIGNAL(SIGCHLD);
+            PRINT_SIGNAL(SIGCONT);
+            PRINT_SIGNAL(SIGTSTP);
+            PRINT_SIGNAL(SIGXCPU);
+            PRINT_SIGNAL(SIGXFSZ);
+
+            PRINT_SIGNAL(SIGPIPE);
+            PRINT_SIGNAL(SIGPOLL);
+            PRINT_SIGNAL(SIGURG);
+
+            PRINT_SIGNAL(SIGALRM);
+            PRINT_SIGNAL(SIGVTALRM);
+            PRINT_SIGNAL(SIGPROF);
+
+            PRINT_SIGNAL(SIGHUP);
+            PRINT_SIGNAL(SIGTTIN);
+            PRINT_SIGNAL(SIGTTOU);
+            PRINT_SIGNAL(SIGWINCH);
+
+            PRINT_SIGNAL(SIGUSR1);
+            PRINT_SIGNAL(SIGUSR2);
+
+#  undef PRINT_SIGNAL
+
+            PRINT("\n");
+
+            PRINT("Real-time signals:");
+
+            int printed = 0;
+            for (int i = 0; i <= SIGRTMAX-SIGRTMIN; i++)
+                if (application.signal.rt_set.signal_SIGRTMIN[i])
+                {
+                    if (printed++ % 11 == 0)
+                        PRINT("\n  ");
+
+                    PRINT(" " COLOR_SIGNAL);
+
+                    if (i <= (SIGRTMAX-SIGRTMIN)/2)
+                        PRINT_("MIN+%i", i);
+                    else
+                        PRINT_("MAX-%i", (SIGRTMAX-SIGRTMIN) - i);
+
+                    PRINT(COLOR_RESET);
+                }
 
             PRINT("\n");
         }
+#endif
 
         if ((application.concurrent_processing.contexts.num_contexts > 0) || (application.args.threads_given > 0))
         {
@@ -990,116 +1151,6 @@ static void initialize(int argc, char *argv[])
         PRINT("\n");
     }
 
-    ////////////////////////////////////
-    // Start signal management thread //
-    ////////////////////////////////////
-
-#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-    if (application.signal.management_used)
-    {
-        application.signal.management_context =
-            station_signal_management_thread_start(&application.signal.set,
-                    application.plugin.configuration.signal_handler,
-                    application.plugin.configuration.signal_handler_data);
-
-        if (application.signal.management_context == NULL)
-        {
-            ERROR("couldn't configure signal management");
-            exit(STATION_APP_ERROR_SIGNAL);
-        }
-
-        AT_EXIT(exit_stop_signal_management_thread);
-        AT_QUICK_EXIT(exit_stop_signal_management_thread);
-    }
-#else
-    application.signal.set = (station_signal_set_t){0};
-#endif
-
-    //////////////////////////////////////////
-    // Create concurrent processing threads //
-    //////////////////////////////////////////
-
-    if (application.concurrent_processing.contexts.num_contexts > 0)
-    {
-        application.concurrent_processing.contexts.contexts = malloc(
-                sizeof(*application.concurrent_processing.contexts.contexts) *
-                application.concurrent_processing.contexts.num_contexts);
-        if (application.concurrent_processing.contexts.contexts == NULL)
-        {
-            ERROR("couldn't allocate array of concurrent processing contexts");
-            exit(STATION_APP_ERROR_MALLOC);
-        }
-
-        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
-            application.concurrent_processing.contexts.contexts[i].state = NULL;
-
-        AT_EXIT(exit_stop_threads);
-        AT_QUICK_EXIT(exit_stop_threads);
-
-        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
-        {
-            station_threads_number_t num_threads;
-            bool busy_wait;
-
-            if (application.args.threads_arg[i] >= 0)
-            {
-                num_threads = application.args.threads_arg[i];
-                busy_wait = false;
-            }
-            else
-            {
-                num_threads = -application.args.threads_arg[i];
-                busy_wait = true;
-            }
-
-            int code = station_concurrent_processing_initialize_context(
-                    &application.concurrent_processing.contexts.contexts[i],
-                    num_threads, busy_wait);
-
-            if (code != 0)
-            {
-                ERROR_("couldn't create concurrent processing context #"
-                        COLOR_NUMBER "%u" COLOR_RESET ", got error "
-                        COLOR_ERROR "%i" COLOR_RESET, i, code);
-                exit(STATION_APP_ERROR_THREADS);
-            }
-        }
-    }
-
-    ////////////////////////////
-    // Create OpenCL contexts //
-    ////////////////////////////
-
-#ifdef STATION_IS_OPENCL_SUPPORTED
-    if (application.opencl.contexts.num_contexts > 0)
-    {
-        AT_EXIT(exit_release_opencl_contexts);
-        AT_QUICK_EXIT(exit_release_opencl_contexts_quick);
-
-        prepare_opencl_tmp_arrays();
-        create_opencl_contexts();
-        release_opencl_tmp_arrays();
-    }
-#endif
-
-    ///////////////////////////////
-    // Initialize SDL subsystems //
-    ///////////////////////////////
-
-#ifdef STATION_IS_SDL_SUPPORTED
-    if (application.plugin.configuration.sdl_is_used)
-    {
-        if (SDL_Init(application.plugin.configuration.sdl_init_flags) < 0)
-        {
-            ERROR("couldn't initialize SDL subsystems");
-            exit(STATION_APP_ERROR_SDL);
-        }
-
-        AT_EXIT(exit_quit_sdl);
-        AT_QUICK_EXIT(exit_quit_sdl);
-    }
-#endif
-
     ///////////////////////////////
     // Create buffers from files //
     ///////////////////////////////
@@ -1126,14 +1177,123 @@ static void initialize(int argc, char *argv[])
 
             if (!success)
             {
-                ERROR_("couldn't create buffer from file #"
-                        COLOR_NUMBER "%u" COLOR_RESET " '"
-                        COLOR_STRING "%s" COLOR_RESET "'\n",
+                ERROR_("couldn't create buffer from file ["
+                        COLOR_NUMBER "%u" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
                         i, application.args.file_arg[i]);
                 exit(STATION_APP_ERROR_FILE);
             }
         }
     }
+
+    ////////////////////////////////////
+    // Start signal management thread //
+    ////////////////////////////////////
+
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    if (application.signal.management_used)
+    {
+        application.signal.management_context =
+            station_signal_management_thread_start(
+                    &application.signal.std_set, &application.signal.rt_set,
+                    application.plugin.configuration.signal_handler,
+                    application.plugin.configuration.signal_handler_data);
+
+        if (application.signal.management_context == NULL)
+        {
+            ERROR("couldn't configure signal management");
+            exit(STATION_APP_ERROR_SIGNAL);
+        }
+
+        AT_EXIT(exit_stop_signal_management_thread);
+        AT_QUICK_EXIT(exit_stop_signal_management_thread);
+    }
+#endif
+
+    //////////////////////////////////////////
+    // Create concurrent processing threads //
+    //////////////////////////////////////////
+
+    if (application.concurrent_processing.contexts.num_contexts > 0)
+    {
+        application.concurrent_processing.contexts.contexts = malloc(
+                sizeof(*application.concurrent_processing.contexts.contexts) *
+                application.concurrent_processing.contexts.num_contexts);
+        if (application.concurrent_processing.contexts.contexts == NULL)
+        {
+            ERROR("couldn't allocate array of concurrent processing contexts");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+            application.concurrent_processing.contexts.contexts[i].state = NULL;
+
+        AT_EXIT(exit_destroy_concurrent_processing_contexts);
+        AT_QUICK_EXIT(exit_destroy_concurrent_processing_contexts);
+
+        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+        {
+            station_threads_number_t num_threads;
+            bool busy_wait;
+
+            if (application.args.threads_arg[i] >= 0)
+            {
+                num_threads = application.args.threads_arg[i];
+                busy_wait = false;
+            }
+            else
+            {
+                num_threads = -application.args.threads_arg[i];
+                busy_wait = true;
+            }
+
+            int code = station_concurrent_processing_initialize_context(
+                    &application.concurrent_processing.contexts.contexts[i],
+                    num_threads, busy_wait);
+
+            if (code != 0)
+            {
+                ERROR_("couldn't create concurrent processing context ["
+                        COLOR_NUMBER "%u" COLOR_RESET "], got error "
+                        COLOR_ERROR "%i" COLOR_RESET, i, code);
+                exit(STATION_APP_ERROR_THREADS);
+            }
+        }
+    }
+
+    ////////////////////////////
+    // Create OpenCL contexts //
+    ////////////////////////////
+
+#ifdef STATION_IS_OPENCL_SUPPORTED
+    if (application.opencl.contexts.num_contexts > 0)
+    {
+        AT_EXIT(exit_release_opencl_contexts);
+        AT_QUICK_EXIT(exit_release_opencl_contexts_quick);
+
+        prepare_opencl_tmp_arrays();
+        create_opencl_contexts();
+        free_opencl_tmp_arrays();
+    }
+#endif
+
+    ///////////////////////////////
+    // Initialize SDL subsystems //
+    ///////////////////////////////
+
+#ifdef STATION_IS_SDL_SUPPORTED
+    if (application.plugin.configuration.sdl_is_used)
+    {
+        if (SDL_Init(application.plugin.configuration.sdl_init_flags) < 0)
+        {
+            ERROR("couldn't initialize SDL subsystems");
+            exit(STATION_APP_ERROR_SDL);
+        }
+
+        AT_EXIT(exit_quit_sdl);
+        AT_QUICK_EXIT(exit_quit_sdl);
+    }
+#endif
 }
 
 static void check_plugin(void)
@@ -1171,12 +1331,16 @@ static void check_plugin(void)
 
 static void exit_release_args(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     args_parser_free(&application.args);
 }
 
 #ifdef STATION_IS_DLFCN_SUPPORTED
 static void exit_unload_plugin(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     dlclose(application.plugin.handle);
 }
 #endif
@@ -1184,12 +1348,16 @@ static void exit_unload_plugin(void)
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
 static void exit_stop_signal_management_thread(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     station_signal_management_thread_stop(application.signal.management_context);
 }
 #endif
 
-static void exit_stop_threads(void)
+static void exit_destroy_concurrent_processing_contexts(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     if (application.concurrent_processing.contexts.contexts != NULL)
         for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
             station_concurrent_processing_destroy_context(&application.concurrent_processing.contexts.contexts[i]);
@@ -1200,12 +1368,16 @@ static void exit_stop_threads(void)
 #ifdef STATION_IS_SDL_SUPPORTED
 static void exit_quit_sdl(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     SDL_Quit();
 }
 #endif
 
 static void exit_destroy_buffers(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     if (application.files.buffers != NULL)
         for (size_t i = 0; i < application.files.num_buffers; i++)
             station_clear_buffer(&application.files.buffers[i]);
@@ -1215,6 +1387,8 @@ static void exit_destroy_buffers(void)
 
 static void exit_end_plugin_help_fn_output(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     static bool job_done = false;
     if (job_done)
         return;
@@ -1229,6 +1403,8 @@ static void exit_end_plugin_help_fn_output(void)
 
 static void exit_end_plugin_conf_fn_output(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     static bool job_done = false;
     if (job_done)
         return;
@@ -1252,7 +1428,8 @@ static int run(void)
     {
         station_plugin_init_func_inputs_t plugin_init_func_inputs = {
             .cmdline = application.plugin.configuration.cmdline,
-            .signal_states = &application.signal.set,
+            .std_signals = &application.signal.std_set,
+            .rt_signals = &application.signal.rt_set,
             .signal_handler_data = application.plugin.configuration.signal_handler_data,
             .files = &application.files,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,
@@ -1343,16 +1520,22 @@ static int finalize(bool quick)
 
 static void exit_finalize_plugin(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     finalize(false);
 }
 
 static void exit_finalize_plugin_quick(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     finalize(true);
 }
 
 static void exit_end_plugin_init_fn_output(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     static bool job_done = false;
     if (job_done)
         return;
@@ -1367,6 +1550,8 @@ static void exit_end_plugin_init_fn_output(void)
 
 static void exit_end_plugin_exec_fn_output(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     static bool job_done = false;
     if (job_done)
         return;
@@ -1756,7 +1941,7 @@ static void create_opencl_contexts(void)
     }
 }
 
-static void release_opencl_tmp_arrays(void)
+static void free_opencl_tmp_arrays(void)
 {
     if (application.opencl.tmp.device_list != NULL)
         for (cl_uint platform_idx = 0; platform_idx <
@@ -1775,6 +1960,8 @@ static void release_opencl_tmp_arrays(void)
 
 static void exit_release_opencl_contexts(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     exit_release_opencl_contexts_quick();
 
     if (application.opencl.contexts.contexts != NULL)
@@ -1790,11 +1977,13 @@ static void exit_release_opencl_contexts(void)
 
     application.opencl.contexts.num_contexts = 0;
 
-    release_opencl_tmp_arrays();
+    free_opencl_tmp_arrays();
 }
 
 static void exit_release_opencl_contexts_quick(void)
 {
+    EXIT_ASSERT_MAIN_THREAD();
+
     if (application.opencl.contexts.contexts != NULL)
     {
         for (uint32_t i = 0; i < application.opencl.contexts.num_contexts; i++)

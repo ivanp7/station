@@ -43,7 +43,8 @@ struct station_opencl_contexts_array;
 typedef struct station_plugin_conf_func_args {
     void *cmdline; ///< Pointer to store parsed command line arguments.
 
-    station_signal_set_t *signals_used; ///< Signals to watch.
+    station_std_signal_set_t *std_signals_used; ///< Standard signals to catch.
+    station_rt_signal_set_t *rt_signals_used;   ///< Real-time signals to catch.
     station_signal_handler_func_t signal_handler; ///< Signal handler.
     void *signal_handler_data; ///< Signal handler data.
 
@@ -61,7 +62,8 @@ typedef struct station_plugin_conf_func_args {
 typedef struct station_plugin_init_func_inputs {
     void *cmdline; ///< Parsed command line arguments.
 
-    station_signal_set_t *signal_states; ///< States of signals.
+    station_std_signal_set_t *std_signals; ///< States of standard signals.
+    station_rt_signal_set_t *rt_signals;   ///< States of real-time signals.
     void *signal_handler_data; ///< Signal handler data.
 
     struct station_buffers_array *files; ///< File buffers.
