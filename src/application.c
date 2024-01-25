@@ -157,27 +157,27 @@
 #define COLOR_ERROR COLOR_FG_BRI_RED
 
 #define OUTPUT_SEGMENT_BEGIN_HELP \
-    "↓↓↓································· HELP ·································↓↓↓"
+    "↓↓↓·································· HELP ·································↓↓↓"
 #define OUTPUT_SEGMENT_END_HELP \
-    "↑↑↑································· HELP ·································↑↑↑"
+    "↑↑↑·································· HELP ·································↑↑↑"
 #define OUTPUT_SEGMENT_BEGIN_CONF \
-    "↓↓↓···························· CONFIGURATION ·····························↓↓↓"
+    "↓↓↓····························· CONFIGURATION ·····························↓↓↓"
 #define OUTPUT_SEGMENT_END_CONF \
-    "↑↑↑···························· CONFIGURATION ·····························↑↑↑"
+    "↑↑↑····························· CONFIGURATION ·····························↑↑↑"
 #define OUTPUT_SEGMENT_BEGIN_INIT \
-    "↓↓↓···························· INITIALIZATION ····························↓↓↓"
+    "↓↓↓····························· INITIALIZATION ····························↓↓↓"
 #define OUTPUT_SEGMENT_END_INIT \
-    "↑↑↑···························· INITIALIZATION ····························↑↑↑"
+    "↑↑↑····························· INITIALIZATION ····························↑↑↑"
 #define OUTPUT_SEGMENT_BEGIN_EXEC \
-    "↓↓↓······························ EXECUTION ·······························↓↓↓"
+    "↓↓↓······························· EXECUTION ·······························↓↓↓"
 #define OUTPUT_SEGMENT_END_EXEC \
-    "↑↑↑······························ EXECUTION ·······························↑↑↑"
+    "↑↑↑······························· EXECUTION ·······························↑↑↑"
 #define OUTPUT_SEGMENT_BEGIN_FINAL \
-    "↓↓↓····························· FINALIZATION ·····························↓↓↓"
+    "↓↓↓······························ FINALIZATION ·····························↓↓↓"
 #define OUTPUT_SEGMENT_END_FINAL \
-    "↑↑↑····························· FINALIZATION ·····························↑↑↑"
+    "↑↑↑······························ FINALIZATION ·····························↑↑↑"
 #define OUTPUT_SEGMENT_SEPARATOR \
-    "=============================================================================="
+    "==============================================================================="
 
 #define PRINT(msg) fprintf(stderr, msg)
 #define PRINT_(msg, ...) fprintf(stderr, msg, __VA_ARGS__)
@@ -259,6 +259,8 @@ static struct {
 
 static void initialize(int argc, char *argv[]);
 
+static void check_plugin(void);
+
 static void exit_release_args(void);
 
 #ifdef STATION_IS_DLFCN_SUPPORTED
@@ -330,6 +332,8 @@ station_app_main(
     {
         application.plugin.vtable = plugin_vtable;
         application.plugin.built_in = true;
+
+        check_plugin();
     }
 
     AT_EXIT(exit_print_final_message);
@@ -631,24 +635,15 @@ static void initialize(int argc, char *argv[])
         {
             if (application.args.inputs_num == 0)
             {
-                PRINT("\n\
-station-app [options...] PLUGIN_FILE [-- [plugin options...]]\n\
-    or\n\
-station-app --help [PLUGIN_FILE [-- [plugin help options...]]]\n\
-    or\n\
-station-app --cl-list[=TYPE]\n\n");
+                PRINT("\nstation-app [options...] [PLUGIN_FILE [-- [plugin options...]]]\n\n");
                 args_parser_print_help();
                 exit(EXIT_SUCCESS);
             }
         }
         else
         {
-            PRINT("\n\
-station-app [options...] [-- [plugin options...]]\n\
-    or\n\
-station-app --help [-- [plugin help options...]]\n\
-    or\n\
-station-app --cl-list[=TYPE]\n\n");
+            PRINT_("\n%s [options...] [-- [custom options...]]\n\n",
+                    application.plugin.vtable->info.name);
             args_parser_print_help();
             PRINT("\n");
         }
@@ -730,47 +725,22 @@ station-app --cl-list[=TYPE]\n\n");
             ERROR("couldn't obtain plugin vtable");
             exit(STATION_APP_ERROR_PLUGIN);
         }
+
+        check_plugin();
     }
 #endif
 
-    /////////////////////////
-    // Check plugin format //
-    /////////////////////////
-
-    if (application.plugin.vtable->format.magic != STATION_PLUGIN_MAGIC)
-    {
-        ERROR_("plugin magic number (" COLOR_VERSION "0x%X" COLOR_RESET
-                ") is wrong (must be " COLOR_VERSION "0x%X" COLOR_RESET ")",
-                application.plugin.vtable->format.magic, STATION_PLUGIN_MAGIC);
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-
-    if (application.plugin.vtable->format.version != STATION_PLUGIN_VERSION)
-    {
-        ERROR_("plugin version (" COLOR_VERSION "%u" COLOR_RESET
-                ") is different from application version (" COLOR_VERSION "%u" COLOR_RESET ")",
-                application.plugin.vtable->format.version, STATION_PLUGIN_VERSION);
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-
-    if ((application.plugin.vtable->func.help == NULL) ||
-            (application.plugin.vtable->func.conf == NULL) ||
-            (application.plugin.vtable->func.init == NULL) ||
-            (application.plugin.vtable->func.final == NULL))
-    {
-        ERROR("plugin vtable contains NULL function pointers");
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-
-    if (application.plugin.vtable->info.name == NULL)
-    {
-        ERROR("plugin name string is NULL");
-        exit(STATION_APP_ERROR_PLUGIN);
-    }
-
     if (application.verbose)
-        PRINT_("Plugin name: " COLOR_STRING "%s" COLOR_RESET "\n\n",
+    {
+        PRINT_("Plugin name: " COLOR_STRING "%s" COLOR_RESET "\n",
                 application.plugin.vtable->info.name);
+
+        if (application.plugin.vtable->info.description != NULL)
+            PRINT_("Plugin description: " COLOR_STRING "%s" COLOR_RESET "\n",
+                    application.plugin.vtable->info.description);
+
+        PRINT("\n");
+    }
 
     ///////////////////////////////
     // Display plugin usage help //
@@ -1163,6 +1133,39 @@ station-app --cl-list[=TYPE]\n\n");
                 exit(STATION_APP_ERROR_FILE);
             }
         }
+    }
+}
+
+static void check_plugin(void)
+{
+    if (application.plugin.vtable->format.magic != STATION_PLUGIN_MAGIC)
+    {
+        ERROR_("plugin magic number (" COLOR_VERSION "0x%X" COLOR_RESET
+                ") is wrong (must be " COLOR_VERSION "0x%X" COLOR_RESET ")",
+                application.plugin.vtable->format.magic, STATION_PLUGIN_MAGIC);
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
+
+    if (application.plugin.vtable->format.version != STATION_PLUGIN_VERSION)
+    {
+        ERROR_("plugin version (" COLOR_VERSION "%u" COLOR_RESET
+                ") is different from application version (" COLOR_VERSION "%u" COLOR_RESET ")",
+                application.plugin.vtable->format.version, STATION_PLUGIN_VERSION);
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
+
+    if ((application.plugin.vtable->func.help == NULL) ||
+            (application.plugin.vtable->func.conf == NULL) ||
+            (application.plugin.vtable->func.init == NULL) ||
+            (application.plugin.vtable->func.final == NULL))
+    {
+        ERROR("plugin vtable contains NULL function pointers");
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
+    else if (application.plugin.vtable->info.name == NULL)
+    {
+        ERROR("plugin name string is NULL");
+        exit(STATION_APP_ERROR_PLUGIN);
     }
 }
 

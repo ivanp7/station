@@ -76,13 +76,15 @@
 /**
  * @brief Define plugin objects.
  */
-#define STATION_PLUGIN(plugin_name, plugin_help, plugin_conf, plugin_init, plugin_final) \
+#define STATION_PLUGIN(plugin_name, plugin_description,         \
+        plugin_help, plugin_conf, plugin_init, plugin_final)    \
     station_plugin_vtable_t STATION_PLUGIN_VTABLE_OBJECT = {    \
         .format = {.magic = STATION_PLUGIN_MAGIC,               \
             .version = STATION_PLUGIN_VERSION},                 \
         .func = {.help = plugin_help, .conf = plugin_conf,      \
             .init = plugin_init, .final = plugin_final},        \
-        .info = {.name = plugin_name}}
+        .info = {.name = plugin_name,                           \
+            .description = plugin_description}}
 
 #endif // _STATION_PLUGIN_DEF_H_
 

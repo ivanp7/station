@@ -466,7 +466,7 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_res
 }
 
 // Define the plugin
-STATION_PLUGIN("Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final);
+STATION_PLUGIN("demo", "Demo plugin", plugin_help, plugin_conf, plugin_init, plugin_final);
 
 ///////////////////////////////////////////////////////////////////////
 

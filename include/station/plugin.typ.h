@@ -165,7 +165,8 @@ typedef struct station_plugin_vtable {
     } func;
 
     struct {
-        const char *name; ///< Plugin name.
+        const char *name;        ///< Plugin name.
+        const char *description; ///< Plugin description.
     } info;
 } station_plugin_vtable_t;
 
