@@ -58,6 +58,9 @@ typedef struct station_signal_set {
 /**
  * @brief Signal handler.
  *
+ * @warning Do not use exit() or quick_exit() in this function,
+ * otherwise the behavior is undefined!
+ *
  * @return Whether the corresponding signal flag should be set.
  */
 typedef bool (*station_signal_handler_func_t)(

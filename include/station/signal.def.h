@@ -66,6 +66,8 @@
 
 /**
  * @brief Signal handler function declarator.
+ *
+ * @see station_signal_handler_func_t
  */
 #define STATION_SIGNAL_HANDLER_FUNC(name) \
     bool name(int signo, void *siginfo, struct station_signal_set *signal_states, void *data)
