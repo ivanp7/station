@@ -15,8 +15,8 @@ option "help" h "Display usage help for app or plugin"
 option "cl-list" l "Display list of OpenCL-compatible hardware" enum typestr="TYPE" values="platforms","devices" default="devices" argoptional
 
 section "Output options"
-option "no-logo" Q "Don't display application logo"
 option "verbose" v "Display more information"
+option "logo" i "Display application logo"
 
 section "Execution options"
 option "threads" j "(multiple) Create concurrent processing context, negative means busy-wait" int typestr="[-]THREADS" multiple

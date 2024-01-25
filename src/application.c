@@ -445,7 +445,7 @@ static void initialize(int argc, char *argv[])
     // Display the logo //
     //////////////////////
 
-    if (!application.args.no_logo_given)
+    if (application.args.logo_given)
     {
         PRINT(COLOR_RESET COLOR_FG_BRI_WHITE "\n\
                                                                 \n\

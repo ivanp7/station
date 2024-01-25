@@ -85,8 +85,8 @@ Alternative modes:
                                   default=`devices')
 
 Output options:
-  -Q, --no-logo                 Don't display application logo
   -v, --verbose                 Display more information
+  -i, --logo                    Display application logo
 
 Execution options:
   -j, --threads=[-]THREADS      (multiple) Create concurrent processing
