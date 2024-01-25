@@ -985,7 +985,7 @@ static void initialize(int argc, char *argv[])
 
 #  define PRINT_SIGNAL(signame) do {                            \
             if (application.signal.std_set.signal_##signame)    \
-                PRINT_(" " COLOR_SIGNAL "%s" COLOR_RESET, #signame + 3); } while (0)
+                PRINT_(" " COLOR_SIGNAL "%s" COLOR_RESET, &#signame[3]); } while (0)
 
             PRINT_SIGNAL(SIGINT);
             PRINT_SIGNAL(SIGQUIT);
