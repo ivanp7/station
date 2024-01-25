@@ -16,7 +16,7 @@ ODIR="build"
 
 FILE_LIBRARY="library"
 FILE_APPLICATION="application"
-FILE_APPLICATION_ENTRY="application_entry"
+FILE_APPLICATION_ENTRY="application.entry"
 
 FILE_APPLICATION_GGO="application.ggo"
 FILE_APPLICATION_ARGS="application.args"
