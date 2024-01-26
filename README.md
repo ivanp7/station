@@ -84,14 +84,14 @@ Alternative mode options:
                                   (possible values="platforms", "devices")
 
 Feature options:
-  -f, --file=FILE               Create data buffer from file
+  -f, --file=FILE               Create data buffer with file contents
   -j, --threads=[±]THREADS      Create concurrent processing context
                                   (+: wait on condition variable, -: busy-wait)
   -c, --cl-context=PID[:DMASK]  Create OpenCL context
                                   (PID: platform index, DMASK: device mask)
   -n, --no-sdl                  Don't initialize SDL subsystems
 
-Signal management (interruption requests):
+Signal management (interruption events):
       --SIGINT                  Catch <interruption request>
       --SIGQUIT                 Catch <quit request>
       --SIGTERM                 Catch <termination request>
