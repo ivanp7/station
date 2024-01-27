@@ -137,6 +137,11 @@ case "${BUILD_TYPE:-}" in
     *) echo "Unknown build type"; exit 1
 esac
 
+case "$CC" in
+    gcc) CFLAGS_DIAGNOSTICS="-fdiagnostics-color=always" ;;
+    clang) CFLAGS_DIAGNOSTICS="-fcolor-diagnostics" ;;
+esac
+
 CFLAGS="-march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors \
 -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition \
 -I${PROJECT_DIR}/${IDIR} \
@@ -181,7 +186,7 @@ _EOF_
 ###############################################################################
 
 cat <<  _EOF_ > "${PROJECT_DIR}/${NINJA}"
-cflags = $CFLAGS
+cflags = $CFLAGS ${CFLAGS_DIAGNOSTICS:-}
 cflags_lib = $CFLAGS_LIBRARY
 cflags_app = $CFLAGS_APPLICATION
 cflags_app_dlfcn = $CFLAGS_APPLICATION $CFLAGS_APPLICATION_DLFCN
