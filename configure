@@ -102,8 +102,9 @@ done
 # Set flags
 ###############################################################################
 
-: ${INSTALL_IFLAGS:="-I${PROJECT_DIR}/${IDIR}"}
-: ${INSTALL_LDIR:="${PROJECT_DIR}/${ODIR}"}
+: ${INSTALL_PREFIX:="${PROJECT_DIR}"}
+: ${INSTALL_IDIR:="${IDIR}"}
+: ${INSTALL_LDIR:="${ODIR}"}
 
 if [ "${FEATURE_IS_SDL_SUPPORTED:-}" ]
 then
@@ -163,22 +164,22 @@ cat <<  _EOF_ > "${PROJECT_DIR}/${PKG_CONF}"
 Name: ${PROJECT_NAME}
 Description: ${PROJECT_DESCRIPTION}
 Version: ${PROJECT_VERSION}
-Cflags: $CFLAGS_COMMON $INSTALL_IFLAGS
+Cflags: $CFLAGS_COMMON -I${INSTALL_PREFIX}/${INSTALL_IDIR}
 _EOF_
 
 if [ "${OUTPUT_LIBRARY_SHARED:-}" ]
 then
-    echo "Libs: $LFLAGS_COMMON -L${INSTALL_LDIR} -l${PROJECT_NAME}" >> "${PROJECT_DIR}/${PKG_CONF}"
+    echo "Libs: $LFLAGS_COMMON -L${INSTALL_PREFIX}/${INSTALL_LDIR} -l${PROJECT_NAME}" >> "${PROJECT_DIR}/${PKG_CONF}"
 else
-    echo "Libs: $LFLAGS_COMMON -Wl,--whole-archive ${INSTALL_LDIR}/${OUT_LIBRARY_STATIC} -Wl,--no-whole-archive" >> "${PROJECT_DIR}/${PKG_CONF}"
+    echo "Libs: $LFLAGS_COMMON -Wl,--whole-archive ${INSTALL_PREFIX}/${INSTALL_LDIR}/${OUT_LIBRARY_STATIC} -Wl,--no-whole-archive" >> "${PROJECT_DIR}/${PKG_CONF}"
 fi
 
 cat <<  _EOF_ > "${PROJECT_DIR}/${PKG_CONF_APP}"
 Name: ${PROJECT_NAME}
 Description: ${PROJECT_DESCRIPTION}
 Version: ${PROJECT_VERSION}
-Cflags: $CFLAGS_COMMON $INSTALL_IFLAGS
-Libs: $LFLAGS_COMMON -Wl,--whole-archive ${INSTALL_LDIR}/${OUT_APPLICATION_LIB} -Wl,--no-whole-archive
+Cflags: $CFLAGS_COMMON -I${INSTALL_PREFIX}/${INSTALL_IDIR}
+Libs: $LFLAGS_COMMON -Wl,--whole-archive ${INSTALL_PREFIX}/${INSTALL_LDIR}/${OUT_APPLICATION_LIB} -Wl,--no-whole-archive
 _EOF_
 
 ###############################################################################
