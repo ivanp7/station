@@ -277,7 +277,7 @@ station_concurrent_processing_thread(
 
         // Check if the current thread is the last
         if (atomic_fetch_add_explicit(&threads_state->current.thread_counter, 1,
-                    memory_order_seq_cst) == thread_counter_last)
+                    memory_order_acq_rel) == thread_counter_last)
         {
             // Wake master thread or execute callback function
             atomic_store_explicit(&threads_state->persistent.pong_flag,
