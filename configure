@@ -160,6 +160,7 @@ ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"
 CFLAGS_APPLICATION_DLFCN="-DSTATION_IS_DLFCN_SUPPORTED"
 
 LFLAGS="$LFLAGS_COMMON"
+LFLAGS_APPLICATION_DLFCN="-ldl"
 
 ###############################################################################
 # Generate pkg-config files
@@ -197,6 +198,7 @@ cflags_lib = $CFLAGS_LIBRARY
 cflags_app = $CFLAGS_APPLICATION
 cflags_app_dlfcn = $CFLAGS_APPLICATION $CFLAGS_APPLICATION_DLFCN
 lflags = $LFLAGS
+lflags_app_dlfcn = $LFLAGS_APPLICATION_DLFCN
 
 
 rule gengetopt
@@ -208,7 +210,7 @@ rule cc
     description = cc \$in
     depfile = \$out.d
     deps = gcc
-    command = ${CC} -MD -MF \$out.d \$cflags \$cflags_custom -c -o \$out \$in
+    command = ${CC} -MMD -MF \$out.d -c -o \$out \$in \$cflags \$cflags_custom
 
 rule ar
     description = ar \$in
@@ -216,7 +218,7 @@ rule ar
 
 rule link
     description = link \$in
-    command = ${CC} \$cflags \$cflags_custom \$lflags \$lflags_custom -o \$out \$in
+    command = ${CC} -o \$out \$in \$cflags \$cflags_custom \$lflags \$lflags_custom
 
 
 build ${ODIR}/${FILE_LIBRARY}.o: cc ${SDIR}/${FILE_LIBRARY}.c
@@ -265,6 +267,7 @@ build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FIL
 
 build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.dlfcn.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
     cflags_custom = \$cflags_app_dlfcn
+    lflags_custom = \$lflags_app_dlfcn
 
 build application-lib: phony ${ODIR}/${OUT_APPLICATION_LIB}
 build application: phony ${ODIR}/${OUT_APPLICATION}
