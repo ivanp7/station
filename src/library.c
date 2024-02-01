@@ -712,19 +712,22 @@ struct station_queue {
 
 struct station_queue*
 station_create_queue(
-        uint8_t capacity_log2,
-
+        size_t element_size,
         uint8_t element_alignment_log2,
-        size_t element_size)
+
+        uint8_t capacity_log2)
 {
 #ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) capacity_log2;
-    (void) element_alignment_log2;
     (void) element_size;
+    (void) element_alignment_log2;
+    (void) capacity_log2;
 
     return NULL;
 #else
-    if ((capacity_log2 > 32) || (element_alignment_log2 >= sizeof(size_t) * CHAR_BIT) || (element_size == 0))
+    if (capacity_log2 > 32)
+        return NULL;
+
+    if ((element_size > 0) && (element_alignment_log2 >= sizeof(size_t) * CHAR_BIT))
         return NULL;
 
     struct station_queue *queue = malloc(sizeof(*queue));
@@ -733,46 +736,61 @@ station_create_queue(
 
     size_t capacity = (size_t)1 << capacity_log2;
 
-    size_t element_alignment = (size_t)1 << element_alignment_log2;
-    size_t element_size_full = (element_size + (element_alignment - 1)) & ~(element_alignment - 1);
-
-    size_t buffer_size = element_size_full * capacity;
-    if (buffer_size / capacity != element_size_full) // overflow
+    if (element_size > 0)
     {
-        free(queue);
-        return NULL;
+        size_t element_alignment = (size_t)1 << element_alignment_log2;
+        size_t element_size_full = (element_size + (element_alignment - 1)) & ~(element_alignment - 1);
+
+        size_t memory_size = element_size_full * capacity;
+        if (memory_size / capacity != element_size_full) // overflow
+        {
+            free(queue);
+            return NULL;
+        }
+
+        queue->buffer = aligned_alloc(element_alignment, memory_size);
+        if (queue->buffer == NULL)
+        {
+            free(queue);
+            return NULL;
+        }
+
+        queue->element_size_full = element_size_full;
+        queue->element_size_used = element_size;
+    }
+    else
+    {
+        queue->buffer = NULL;
+        queue->element_size_full = 0;
+        queue->element_size_used = 0;
     }
 
-    queue->buffer = aligned_alloc(element_alignment, buffer_size);
-    if (queue->buffer == NULL)
     {
-        free(queue);
-        return NULL;
-    }
+        size_t memory_size = sizeof(*queue->push_count) * capacity;
 
-    buffer_size = sizeof(*queue->push_count) * capacity;
-    if (buffer_size / capacity != sizeof(*queue->push_count))
-    {
-        free(queue->buffer);
-        free(queue);
-        return NULL;
-    }
+        if (memory_size / capacity != sizeof(*queue->push_count))
+        {
+            free(queue->buffer);
+            free(queue);
+            return NULL;
+        }
 
-    queue->push_count = malloc(buffer_size);
-    if (queue->push_count == NULL)
-    {
-        free(queue->buffer);
-        free(queue);
-        return NULL;
-    }
+        queue->push_count = malloc(memory_size);
+        if (queue->push_count == NULL)
+        {
+            free(queue->buffer);
+            free(queue);
+            return NULL;
+        }
 
-    queue->pop_count = malloc(buffer_size);
-    if (queue->pop_count == NULL)
-    {
-        free(queue->push_count);
-        free(queue->buffer);
-        free(queue);
-        return NULL;
+        queue->pop_count = malloc(memory_size);
+        if (queue->pop_count == NULL)
+        {
+            free(queue->push_count);
+            free(queue->buffer);
+            free(queue);
+            return NULL;
+        }
     }
 
     for (size_t i = 0; i < capacity; i++)
@@ -786,9 +804,6 @@ station_create_queue(
 
     queue->mask = capacity - 1;
     queue->mask_bits = capacity_log2;
-
-    queue->element_size_full = element_size_full;
-    queue->element_size_used = element_size;
 
     return queue;
 #endif
@@ -823,7 +838,7 @@ station_queue_push(
 
     return false;
 #else
-    if ((queue == NULL) || (value == NULL))
+    if (queue == NULL)
         return false;
 
     uint32_t mask = queue->mask;
@@ -849,7 +864,14 @@ station_queue_push(
                         &total_push_count, total_push_count + 1,
                         memory_order_relaxed, memory_order_relaxed))
             {
-                memcpy(queue->buffer + queue->element_size_full * index, value, queue->element_size_used);
+                if (queue->buffer != NULL)
+                {
+                    if (value != NULL)
+                        memcpy(queue->buffer + queue->element_size_full * index, value, queue->element_size_used);
+                    else
+                        memset(queue->buffer + queue->element_size_full * index, 0, queue->element_size_used);
+                }
+
                 atomic_store_explicit(&queue->push_count[index], push_count + 1, memory_order_release);
                 return true;
             }
@@ -871,7 +893,7 @@ station_queue_pop(
 
     return false;
 #else
-    if ((queue == NULL) || (value == NULL))
+    if (queue == NULL)
         return false;
 
     uint32_t mask = queue->mask;
@@ -897,7 +919,9 @@ station_queue_pop(
                         &total_pop_count, total_pop_count + 1,
                         memory_order_relaxed, memory_order_relaxed))
             {
-                memcpy(value, queue->buffer + queue->element_size_full * index, queue->element_size_used);
+                if ((queue->buffer != NULL) && (value != NULL))
+                    memcpy(value, queue->buffer + queue->element_size_full * index, queue->element_size_used);
+
                 atomic_store_explicit(&queue->pop_count[index], pop_count + 1, memory_order_release);
                 return true;
             }

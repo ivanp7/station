@@ -501,7 +501,7 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
     mtx_init(&resources->counter_mutex, mtx_plain);
 
     // Create lock-free queue for stress-test
-    resources->queue = station_create_queue(2, 2 * alignof(station_task_idx_t), sizeof(station_task_idx_t));
+    resources->queue = station_create_queue(sizeof(station_task_idx_t), 2 * alignof(station_task_idx_t), 2);
 
     // Other variables
     resources->alarm_set = false;

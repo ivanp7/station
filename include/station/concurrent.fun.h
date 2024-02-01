@@ -97,10 +97,10 @@ station_concurrent_processing_execute(
  */
 struct station_queue*
 station_create_queue(
-        uint8_t capacity_log2, ///< [in] Log2 of maximum capacity of queue.
-
+        size_t element_size,            ///< [in] Queue element size in bytes.
         uint8_t element_alignment_log2, ///< [in] Log2 of queue element alignment in bytes.
-        size_t element_size ///< [in] Queue element size in bytes.
+
+        uint8_t capacity_log2 ///< [in] Log2 of maximum capacity of queue.
 );
 
 /**
