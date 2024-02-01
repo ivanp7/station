@@ -9,8 +9,8 @@ DL_LOADER = /lib64/ld-linux-x86-64.so.2
 
 CFLAGS = -march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors \
 		 -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition \
-		 $(shell pkg-config --with-path "${STATION_PATH}" --cflags station) -fPIC -O0 -g3 -ggdb
-LFLAGS = $(shell pkg-config --with-path "${STATION_PATH}" --libs station) -fPIC -shared -rdynamic -DDL_LOADER="\"${DL_LOADER}\"" -Wl,-e,plugin_main
+		 $(shell PKG_CONFIG_PATH="${STATION_PATH}" pkg-config --cflags station) -fPIC -O0 -g3 -ggdb
+LFLAGS = $(shell PKG_CONFIG_PATH="${STATION_PATH}" pkg-config --libs station) -fPIC -shared -rdynamic -DDL_LOADER="\"${DL_LOADER}\"" -Wl,-e,plugin_main
 
 
 ${OUT_PLUGIN}: ${HEADER} ${SOURCE}
