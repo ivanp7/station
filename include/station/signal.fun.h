@@ -64,5 +64,18 @@ station_signal_management_thread_stop(
         struct station_signal_management_context *context ///< [in] Signal management context.
 );
 
+/**
+ * @brief Extract signal management thread properties.
+ */
+void
+station_signal_management_thread_get_properties(
+        struct station_signal_management_context *context, ///< [in] Signal management context.
+
+        station_std_signal_set_t **std_signals, ///< [out] Standard signals to catch.
+        station_rt_signal_set_t **rt_signals,   ///< [out] Real-time signals to catch.
+        station_signal_handler_func_t *signal_handler, ///< [out] Signal handler.
+        void **signal_handler_data ///< [out] Signal handler data.
+);
+
 #endif // _STATION_SIGNAL_FUN_H_
 

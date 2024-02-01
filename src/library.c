@@ -1198,6 +1198,35 @@ station_signal_management_thread_stop(
 #endif
 }
 
+void
+station_signal_management_thread_get_properties(
+        struct station_signal_management_context *context,
+
+        station_std_signal_set_t **std_signals,
+        station_rt_signal_set_t **rt_signals,
+        station_signal_handler_func_t *signal_handler,
+        void **signal_handler_data)
+{
+#ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
+    (void) context;
+#else
+    if (context == NULL)
+        return;
+
+    if (std_signals != NULL)
+        *std_signals = context->std_signals;
+
+    if (rt_signals != NULL)
+        *rt_signals = context->rt_signals;
+
+    if (signal_handler != NULL)
+        *signal_handler = context->handler;
+
+    if (signal_handler_data != NULL)
+        *signal_handler_data = context->handler_data;
+#endif
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // sdl.fun.h
 ///////////////////////////////////////////////////////////////////////////////
