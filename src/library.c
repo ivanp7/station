@@ -36,6 +36,7 @@
 #ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
 #  include <threads.h>
 #  include <stdatomic.h>
+#  include <limits.h>
 #endif
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
@@ -691,6 +692,219 @@ station_concurrent_processing_execute(
     }
 
     return true;
+#endif
+}
+
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+struct station_queue {
+    unsigned char *buffer;
+
+    atomic_uint_fast32_t *push_count, *pop_count;
+    atomic_uint_fast64_t total_push_count, total_pop_count;
+
+    uint32_t mask;
+    uint8_t mask_bits;
+
+    size_t element_size_full;
+    size_t element_size_used;
+};
+#endif
+
+struct station_queue*
+station_create_queue(
+        uint8_t capacity_log2,
+
+        uint8_t element_alignment_log2,
+        size_t element_size)
+{
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    (void) capacity_log2;
+    (void) element_alignment_log2;
+    (void) element_size;
+
+    return NULL;
+#else
+    if ((capacity_log2 > 32) || (element_alignment_log2 >= sizeof(size_t) * CHAR_BIT) || (element_size == 0))
+        return NULL;
+
+    struct station_queue *queue = malloc(sizeof(*queue));
+    if (queue == NULL)
+        return NULL;
+
+    size_t capacity = (size_t)1 << capacity_log2;
+
+    size_t element_alignment = (size_t)1 << element_alignment_log2;
+    size_t element_size_full = (element_size + (element_alignment - 1)) & ~(element_alignment - 1);
+
+    size_t buffer_size = element_size_full * capacity;
+    if (buffer_size / capacity != element_size_full) // overflow
+    {
+        free(queue);
+        return NULL;
+    }
+
+    queue->buffer = aligned_alloc(element_alignment, buffer_size);
+    if (queue->buffer == NULL)
+    {
+        free(queue);
+        return NULL;
+    }
+
+    buffer_size = sizeof(*queue->push_count) * capacity;
+    if (buffer_size / capacity != sizeof(*queue->push_count))
+    {
+        free(queue->buffer);
+        free(queue);
+        return NULL;
+    }
+
+    queue->push_count = malloc(buffer_size);
+    if (queue->push_count == NULL)
+    {
+        free(queue->buffer);
+        free(queue);
+        return NULL;
+    }
+
+    queue->pop_count = malloc(buffer_size);
+    if (queue->pop_count == NULL)
+    {
+        free(queue->push_count);
+        free(queue->buffer);
+        free(queue);
+        return NULL;
+    }
+
+    for (size_t i = 0; i < capacity; i++)
+    {
+        atomic_init(&queue->push_count[i], 0);
+        atomic_init(&queue->pop_count[i], 0);
+    }
+
+    atomic_init(&queue->total_push_count, 0);
+    atomic_init(&queue->total_pop_count, 0);
+
+    queue->mask = capacity - 1;
+    queue->mask_bits = capacity_log2;
+
+    queue->element_size_full = element_size_full;
+    queue->element_size_used = element_size;
+
+    return queue;
+#endif
+}
+
+void
+station_destroy_queue(
+        struct station_queue *queue)
+{
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    (void) queue;
+#else
+    if (queue != NULL)
+    {
+        free(queue->push_count);
+        free(queue->pop_count);
+        free(queue->buffer);
+
+        free(queue);
+    }
+#endif
+}
+
+bool
+station_queue_push(
+        struct station_queue *queue,
+        const void *value)
+{
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    (void) queue;
+    (void) value;
+
+    return false;
+#else
+    if ((queue == NULL) || (value == NULL))
+        return false;
+
+    uint32_t mask = queue->mask;
+    uint8_t mask_bits = queue->mask_bits;
+
+    uint64_t total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
+
+    for (;;)
+    {
+        uint32_t index = total_push_count & mask;
+
+        uint32_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_acquire);
+        uint32_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_relaxed);
+
+        if (push_count > pop_count) // queue is full
+            return false;
+
+        uint32_t revolution_count = total_push_count >> mask_bits;
+        if (revolution_count == push_count) // current turn is ours
+        {
+            // Try to acquire the slot
+            if (atomic_compare_exchange_weak_explicit(&queue->total_push_count,
+                        &total_push_count, total_push_count + 1,
+                        memory_order_relaxed, memory_order_relaxed))
+            {
+                memcpy(queue->buffer + queue->element_size_full * index, value, queue->element_size_used);
+                atomic_store_explicit(&queue->push_count[index], push_count + 1, memory_order_release);
+                return true;
+            }
+        }
+        else // retry
+            total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
+    }
+#endif
+}
+
+bool
+station_queue_pop(
+        struct station_queue *queue,
+        void *value)
+{
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    (void) queue;
+    (void) value;
+
+    return false;
+#else
+    if ((queue == NULL) || (value == NULL))
+        return false;
+
+    uint32_t mask = queue->mask;
+    uint8_t mask_bits = queue->mask_bits;
+
+    uint64_t total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
+
+    for (;;)
+    {
+        uint32_t index = total_pop_count & mask;
+
+        uint32_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_acquire);
+        uint32_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_relaxed);
+
+        if (pop_count == push_count) // queue is empty
+            return false;
+
+        uint32_t revolution_count = total_pop_count >> mask_bits;
+        if (revolution_count == pop_count) // current turn is ours
+        {
+            // Try to acquire the slot
+            if (atomic_compare_exchange_weak_explicit(&queue->total_pop_count,
+                        &total_pop_count, total_pop_count + 1,
+                        memory_order_relaxed, memory_order_relaxed))
+            {
+                memcpy(value, queue->buffer + queue->element_size_full * index, queue->element_size_used);
+                atomic_store_explicit(&queue->pop_count[index], pop_count + 1, memory_order_release);
+                return true;
+            }
+        }
+        else // retry
+            total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
+    }
 #endif
 }
 

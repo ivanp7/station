@@ -28,6 +28,8 @@
 
 #include <station/concurrent.typ.h>
 
+struct station_queue;
+
 /**
  * @brief Initialize concurrent processing context and create threads.
  *
@@ -83,6 +85,52 @@ station_concurrent_processing_execute(
         void *callback_data,               ///< [in] Callback function data.
 
         bool busy_wait ///< [in] Whether busy-waiting is enabled.
+);
+
+/**
+ * @brief Create lock-free queue.
+ *
+ * Maximum queue capacity is (1 << capacity_log2) elements.
+ * Maximum supported value of capacity_log2 is 32.
+ *
+ * @return Lock-free queue.
+ */
+struct station_queue*
+station_create_queue(
+        uint8_t capacity_log2, ///< [in] Log2 of maximum capacity of queue.
+
+        uint8_t element_alignment_log2, ///< [in] Log2 of queue element alignment in bytes.
+        size_t element_size ///< [in] Queue element size in bytes.
+);
+
+/**
+ * @brief Destroy lock-free queue.
+ */
+void
+station_destroy_queue(
+        struct station_queue *queue ///< [in] Queue to destroy.
+);
+
+/**
+ * @brief Push value to lock-free queue.
+ *
+ * @return True if element was pushed to queue, false if queue is full.
+ */
+bool
+station_queue_push(
+        struct station_queue *queue, ///< [in] Queue to push value to.
+        const void *value ///< [in] Pointer to pushed value.
+);
+
+/**
+ * @brief Pop value from lock-free queue.
+ *
+ * @return True if element was popped from queue, false if queue is empty.
+ */
+bool
+station_queue_pop(
+        struct station_queue *queue, ///< [in] Queue to pop value from.
+        void *value ///< [out] Memory to write popped value to.
 );
 
 #endif // _STATION_CONCURRENT_FUN_H_

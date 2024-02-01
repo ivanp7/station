@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdatomic.h>
+#include <stdalign.h>
 #include <signal.h>
 #include <unistd.h> // for alarm()
 
@@ -70,6 +71,23 @@ static STATION_PFUNC(pfunc_dec) // implicit arguments: data, task_idx, thread_id
     mtx_unlock(&resources->counter_mutex);
 }
 
+// Concurrent processing function
+static STATION_PFUNC(pfunc_queue) // implicit arguments: data, task_idx, thread_idx
+{
+    (void) thread_idx;
+
+    struct plugin_resources *resources = data;
+
+    while (!station_queue_push(resources->queue, &task_idx)); // wait until push
+    task_idx = 0;
+    while (!station_queue_pop(resources->queue, &task_idx)); // wait until pop
+
+    // Increment the counter safely
+    mtx_lock(&resources->counter_mutex);
+    resources->counter += task_idx;
+    mtx_unlock(&resources->counter_mutex);
+}
+
 #ifdef STATION_IS_SDL_SUPPORTED
 // Concurrent processing function
 static STATION_PFUNC(pfunc_draw) // implicit arguments: data, task_idx, thread_idx
@@ -108,6 +126,7 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 
         // Stress test of concurrent processing
         printf("Performing stress-test of concurrent processing...\n");
+
         for (unsigned i = 0; i < NUM_ITERATIONS; i++)
         {
             if ((i+1) % 1024 == 0)
@@ -155,6 +174,28 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
                 exit(1);
             }
         }
+
+        if (resources->queue != NULL)
+        {
+            printf("Performing stress-test of lock-free queue...\n");
+
+            // Increment the counter to check if all task indices were processed
+            do
+            {
+                result = station_concurrent_processing_execute(resources->concurrent_processing_context,
+                        NUM_TASKS, BATCH_SIZE, pfunc_queue, resources,
+                        NULL, &flag, false); // blocking call
+            }
+            while (!result);
+
+            // Sum of [0; N-1] is N*(N-1)/2
+            if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+            {
+                printf("counter has incorrect value\n");
+                exit(1);
+            }
+        }
+
         printf("Stress-test is complete!\n");
     }
 
@@ -459,6 +500,9 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
     resources->counter = 0;
     mtx_init(&resources->counter_mutex, mtx_plain);
 
+    // Create lock-free queue for stress-test
+    resources->queue = station_create_queue(2, 2 * alignof(station_task_idx_t), sizeof(station_task_idx_t));
+
     // Other variables
     resources->alarm_set = false;
     resources->prev_frame = 0;
@@ -475,6 +519,7 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_res
     if (!quick)
     {
         mtx_destroy(&resources->counter_mutex);
+        station_destroy_queue(resources->queue);
 
         station_unload_font_psf2(resources->font);
     }

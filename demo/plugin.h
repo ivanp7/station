@@ -19,7 +19,7 @@
 // Parameters for concurrent execution of pfunc_inc() and pfunc_dec()
 #define NUM_TASKS 1024
 #define BATCH_SIZE 16 // number of tasks each thread does at once
-#define NUM_ITERATIONS (128*128)
+#define NUM_ITERATIONS (1024)
 
 #define ALARM_DELAY 5 // argument for alarm()
 
@@ -54,6 +54,9 @@ struct plugin_resources {
     int counter;
     mtx_t counter_mutex;
 
+    // test lock-free queue
+    struct station_queue *queue;
+
     // for FPS computation
     bool alarm_set;
     unsigned prev_frame, frame;
@@ -68,6 +71,8 @@ static STATION_PFUNC_CALLBACK(pfunc_cb_flag);
 
 static STATION_PFUNC(pfunc_inc);
 static STATION_PFUNC(pfunc_dec);
+
+static STATION_PFUNC(pfunc_queue);
 
 #ifdef STATION_IS_SDL_SUPPORTED
 static STATION_PFUNC(pfunc_draw);
