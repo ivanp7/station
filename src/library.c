@@ -695,14 +695,26 @@ station_concurrent_processing_execute(
 #endif
 }
 
+#ifdef STATION_IS_QUEUE_LARGER_CAPACITY_ENABLED
+typedef uint_fast32_t station_queue_count_t;
+typedef atomic_uint_fast32_t station_queue_atomic_count_t;
+typedef uint_fast64_t station_queue_count2_t;
+typedef atomic_uint_fast64_t station_queue_atomic_count2_t;
+#else
+typedef uint_fast16_t station_queue_count_t;
+typedef atomic_uint_fast16_t station_queue_atomic_count_t;
+typedef uint_fast32_t station_queue_count2_t;
+typedef atomic_uint_fast32_t station_queue_atomic_count2_t;
+#endif
+
 #ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
 struct station_queue {
     unsigned char *buffer;
 
-    atomic_uint_fast32_t *push_count, *pop_count;
-    atomic_uint_fast64_t total_push_count, total_pop_count;
+    station_queue_atomic_count_t *push_count, *pop_count;
+    station_queue_atomic_count2_t total_push_count, total_pop_count;
 
-    uint32_t mask;
+    station_queue_count_t mask;
     uint8_t mask_bits;
 
     size_t element_size_full;
@@ -724,7 +736,7 @@ station_create_queue(
 
     return NULL;
 #else
-    if (capacity_log2 > 32)
+    if (capacity_log2 > sizeof(station_queue_count_t) * CHAR_BIT)
         return NULL;
 
     if ((element_size > 0) && (element_alignment_log2 >= sizeof(size_t) * CHAR_BIT))
@@ -841,22 +853,22 @@ station_queue_push(
     if (queue == NULL)
         return false;
 
-    uint32_t mask = queue->mask;
+    station_queue_count_t mask = queue->mask;
     uint8_t mask_bits = queue->mask_bits;
 
-    uint64_t total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
+    station_queue_count2_t total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
 
     for (;;)
     {
-        uint32_t index = total_push_count & mask;
+        station_queue_count_t index = total_push_count & mask;
 
-        uint32_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_acquire);
-        uint32_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_relaxed);
+        station_queue_count_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_acquire);
+        station_queue_count_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_relaxed);
 
         if (push_count > pop_count) // queue is full
             return false;
 
-        uint32_t revolution_count = total_push_count >> mask_bits;
+        station_queue_count_t revolution_count = total_push_count >> mask_bits;
         if (revolution_count == push_count) // current turn is ours
         {
             // Try to acquire the slot
@@ -876,7 +888,7 @@ station_queue_push(
                 return true;
             }
         }
-        else // retry
+        else
             total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
     }
 #endif
@@ -896,22 +908,22 @@ station_queue_pop(
     if (queue == NULL)
         return false;
 
-    uint32_t mask = queue->mask;
+    station_queue_count_t mask = queue->mask;
     uint8_t mask_bits = queue->mask_bits;
 
-    uint64_t total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
+    station_queue_count2_t total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
 
     for (;;)
     {
-        uint32_t index = total_pop_count & mask;
+        station_queue_count_t index = total_pop_count & mask;
 
-        uint32_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_acquire);
-        uint32_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_relaxed);
+        station_queue_count_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_acquire);
+        station_queue_count_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_relaxed);
 
         if (pop_count == push_count) // queue is empty
             return false;
 
-        uint32_t revolution_count = total_pop_count >> mask_bits;
+        station_queue_count_t revolution_count = total_pop_count >> mask_bits;
         if (revolution_count == pop_count) // current turn is ours
         {
             // Try to acquire the slot
@@ -926,9 +938,41 @@ station_queue_pop(
                 return true;
             }
         }
-        else // retry
+        else
             total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
     }
+#endif
+}
+
+size_t
+station_queue_capacity(
+        struct station_queue *queue)
+{
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    (void) queue;
+
+    return 0;
+#else
+    if (queue == NULL)
+        return 0;
+
+    return (size_t)queue->mask + 1;
+#endif
+}
+
+size_t
+station_queue_element_size(
+        struct station_queue *queue)
+{
+#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    (void) queue;
+
+    return 0;
+#else
+    if (queue == NULL)
+        return 0;
+
+    return queue->element_size_used;
 #endif
 }
 

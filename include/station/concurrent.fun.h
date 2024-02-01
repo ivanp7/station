@@ -91,7 +91,8 @@ station_concurrent_processing_execute(
  * @brief Create lock-free queue.
  *
  * Maximum queue capacity is (1 << capacity_log2) elements.
- * Maximum supported value of capacity_log2 is 32.
+ * Maximum supported value of capacity_log2 is 16 (or 32,
+ * if large queues were enabled at configuration time).
  *
  * @return Lock-free queue.
  */
@@ -131,6 +132,26 @@ bool
 station_queue_pop(
         struct station_queue *queue, ///< [in] Queue to pop value from.
         void *value ///< [out] Memory to write popped value to.
+);
+
+/**
+ * @brief Get queue capacity.
+ *
+ * @return Queue capacity.
+ */
+size_t
+station_queue_capacity(
+        struct station_queue *queue ///< [in] Queue.
+);
+
+/**
+ * @brief Get queue element size.
+ *
+ * @return Queue element size.
+ */
+size_t
+station_queue_element_size(
+        struct station_queue *queue ///< [in] Queue.
 );
 
 #endif // _STATION_CONCURRENT_FUN_H_

@@ -88,6 +88,10 @@ do
             FEATURE_IS_OPENCL_SUPPORTED="true"
             ;;
 
+        Q) # feature: enable larger lock-free queue capacity for machines with 64-bit lock-free atomics
+            FEATURE_IS_QUEUE_LARGER_CAPACITY_ENABLED="true"
+            ;;
+
         *) # display help
             usage
     esac
@@ -149,7 +153,8 @@ CFLAGS="-march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors \
 $CFLAGS_COMMON \
 $CFLAGS_BUILD_TYPE"
 
-CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"}"
+CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
+${FEATURE_IS_QUEUE_LARGER_CAPACITY_ENABLED:+"-DSTATION_IS_QUEUE_LARGER_CAPACITY_ENABLED"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
 ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"}"
 CFLAGS_APPLICATION_DLFCN="-DSTATION_IS_DLFCN_SUPPORTED"
