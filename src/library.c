@@ -26,6 +26,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <string.h>
+#include <limits.h>
 #include <assert.h>
 
 #if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
@@ -36,7 +38,6 @@
 #ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
 #  include <threads.h>
 #  include <stdatomic.h>
-#  include <limits.h>
 #endif
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
@@ -696,31 +697,44 @@ station_concurrent_processing_execute(
 }
 
 #ifdef STATION_IS_QUEUE_LARGER_CAPACITY_ENABLED
+
 typedef uint_fast32_t station_queue_count_t;
-typedef atomic_uint_fast32_t station_queue_atomic_count_t;
 typedef uint_fast64_t station_queue_count2_t;
+
+#  ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+typedef atomic_uint_fast32_t station_queue_atomic_count_t;
 typedef atomic_uint_fast64_t station_queue_atomic_count2_t;
+#  endif
+
 #else
+
 typedef uint_fast16_t station_queue_count_t;
-typedef atomic_uint_fast16_t station_queue_atomic_count_t;
 typedef uint_fast32_t station_queue_count2_t;
+
+#  ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+typedef atomic_uint_fast16_t station_queue_atomic_count_t;
 typedef atomic_uint_fast32_t station_queue_atomic_count2_t;
+#  endif
+
 #endif
 
-#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
 struct station_queue {
     unsigned char *buffer;
 
-    station_queue_atomic_count_t *push_count, *pop_count;
-    station_queue_atomic_count2_t total_push_count, total_pop_count;
-
-    station_queue_count_t mask;
-    uint8_t mask_bits;
-
     size_t element_size_full;
     size_t element_size_used;
-};
+
+    station_queue_count_t mask;
+
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    uint8_t mask_bits;
+
+    station_queue_atomic_count_t *push_count, *pop_count;
+    station_queue_atomic_count2_t total_push_count, total_pop_count;
+#else
+    station_queue_count2_t total_push_count, total_pop_count;
 #endif
+};
 
 struct station_queue*
 station_create_queue(
@@ -729,13 +743,6 @@ station_create_queue(
 
         uint8_t capacity_log2)
 {
-#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) element_size;
-    (void) element_alignment_log2;
-    (void) capacity_log2;
-
-    return NULL;
-#else
     if (capacity_log2 > sizeof(station_queue_count_t) * CHAR_BIT)
         return NULL;
 
@@ -777,6 +784,11 @@ station_create_queue(
         queue->element_size_used = 0;
     }
 
+    queue->mask = capacity - 1;
+
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+    queue->mask_bits = capacity_log2;
+
     {
         size_t memory_size = sizeof(*queue->push_count) * capacity;
 
@@ -813,30 +825,28 @@ station_create_queue(
 
     atomic_init(&queue->total_push_count, 0);
     atomic_init(&queue->total_pop_count, 0);
-
-    queue->mask = capacity - 1;
-    queue->mask_bits = capacity_log2;
+#else
+    queue->total_push_count = 0;
+    queue->total_pop_count = 0;
+#endif
 
     return queue;
-#endif
 }
 
 void
 station_destroy_queue(
         struct station_queue *queue)
 {
-#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) queue;
-#else
     if (queue != NULL)
     {
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
         free(queue->push_count);
         free(queue->pop_count);
+#endif
         free(queue->buffer);
 
         free(queue);
     }
-#endif
 }
 
 bool
@@ -844,16 +854,12 @@ station_queue_push(
         struct station_queue *queue,
         const void *value)
 {
-#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) queue;
-    (void) value;
-
-    return false;
-#else
     if (queue == NULL)
         return false;
 
     station_queue_count_t mask = queue->mask;
+
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
     uint8_t mask_bits = queue->mask_bits;
 
     station_queue_count2_t total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
@@ -891,6 +897,24 @@ station_queue_push(
         else
             total_push_count = atomic_load_explicit(&queue->total_push_count, memory_order_relaxed);
     }
+#else
+    station_queue_count2_t total_push_count = queue->total_push_count;
+
+    if (total_push_count - queue->total_pop_count == mask + 1) // queue is full
+        return false;
+
+    if (queue->buffer != NULL)
+    {
+        station_queue_count_t index = total_push_count & mask;
+
+        if (value != NULL)
+            memcpy(queue->buffer + queue->element_size_full * index, value, queue->element_size_used);
+        else
+            memset(queue->buffer + queue->element_size_full * index, 0, queue->element_size_used);
+    }
+
+    queue->total_push_count++;
+    return true;
 #endif
 }
 
@@ -899,16 +923,12 @@ station_queue_pop(
         struct station_queue *queue,
         void *value)
 {
-#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) queue;
-    (void) value;
-
-    return false;
-#else
     if (queue == NULL)
         return false;
 
     station_queue_count_t mask = queue->mask;
+
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
     uint8_t mask_bits = queue->mask_bits;
 
     station_queue_count2_t total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
@@ -941,6 +961,21 @@ station_queue_pop(
         else
             total_pop_count = atomic_load_explicit(&queue->total_pop_count, memory_order_relaxed);
     }
+#else
+    station_queue_count2_t total_pop_count = queue->total_pop_count;
+
+    if (total_pop_count == queue->total_push_count) // queue is empty
+        return false;
+
+    if ((queue->buffer != NULL) && (value != NULL))
+    {
+        station_queue_count_t index = total_pop_count & mask;
+
+        memcpy(value, queue->buffer + queue->element_size_full * index, queue->element_size_used);
+    }
+
+    queue->total_pop_count++;
+    return true;
 #endif
 }
 
@@ -948,32 +983,20 @@ size_t
 station_queue_capacity(
         struct station_queue *queue)
 {
-#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) queue;
-
-    return 0;
-#else
     if (queue == NULL)
         return 0;
 
     return (size_t)queue->mask + 1;
-#endif
 }
 
 size_t
 station_queue_element_size(
         struct station_queue *queue)
 {
-#ifndef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
-    (void) queue;
-
-    return 0;
-#else
     if (queue == NULL)
         return 0;
 
     return queue->element_size_used;
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
