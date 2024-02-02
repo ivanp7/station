@@ -871,7 +871,7 @@ station_queue_push(
         station_queue_count_t push_count = atomic_load_explicit(&queue->push_count[index], memory_order_acquire);
         station_queue_count_t pop_count = atomic_load_explicit(&queue->pop_count[index], memory_order_relaxed);
 
-        if (push_count > pop_count) // queue is full
+        if (push_count != pop_count) // queue is full
             return false;
 
         station_queue_count_t revolution_count = total_push_count >> mask_bits;
