@@ -21,6 +21,9 @@
 #define BATCH_SIZE 16 // number of tasks each thread does at once
 #define NUM_ITERATIONS (1024)
 
+#define QUEUE_ALIGNMENT_LOG2 4 // log2 of lock-free queue element alignment
+#define QUEUE_CAPACITY_LOG2 2 // log2 of lock-free queue capacity
+
 #define ALARM_DELAY 5 // argument for alarm()
 
 #define TEXTURE_WIDTH 256
