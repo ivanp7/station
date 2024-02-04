@@ -129,9 +129,6 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
 
         for (unsigned i = 0; i < NUM_ITERATIONS; i++)
         {
-            if ((i+1) % 1024 == 0)
-                printf("%u\n", i);
-
             // Increment the counter to check if all task indices were processed
             do
             {
@@ -179,20 +176,25 @@ static STATION_SFUNC(sfunc_pre) // implicit arguments: state, fsm_data
         {
             printf("Performing stress-test of lock-free queue...\n");
 
-            // Increment the counter to check if all task indices were processed
-            do
+            for (unsigned i = 0; i < NUM_ITERATIONS; i++)
             {
-                result = station_concurrent_processing_execute(resources->concurrent_processing_context,
-                        NUM_TASKS, BATCH_SIZE, pfunc_queue, resources,
-                        NULL, &flag, false); // blocking call
-            }
-            while (!result);
+                // Increment the counter to check if all task indices were processed
+                do
+                {
+                    result = station_concurrent_processing_execute(resources->concurrent_processing_context,
+                            NUM_TASKS, BATCH_SIZE, pfunc_queue, resources,
+                            NULL, &flag, false); // blocking call
+                }
+                while (!result);
 
-            // Sum of [0; N-1] is N*(N-1)/2
-            if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
-            {
-                printf("counter has incorrect value\n");
-                exit(1);
+                // Sum of [0; N-1] is N*(N-1)/2
+                if (resources->counter * 2 != (NUM_TASKS * (NUM_TASKS - 1)))
+                {
+                    printf("counter has incorrect value\n");
+                    exit(1);
+                }
+
+                resources->counter = 0;
             }
         }
 
