@@ -6,6 +6,7 @@
 #include <station/concurrent.def.h>
 #include <station/concurrent.typ.h>
 #include <station/sdl.typ.h>
+#include <station/buffer.typ.h>
 #include <station/font.typ.h>
 
 #include <stdbool.h>
@@ -50,6 +51,7 @@ struct plugin_resources {
     bool sdl_window_created; // whether window was created
     bool window_frozen; // whether window texture is updated
 
+    station_buffer_t font_buffer;
     station_font_psf2_t *font;
     const char *text; // floating text
 

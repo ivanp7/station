@@ -74,7 +74,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 bool
-station_fill_buffer_from_file(
+station_buffer_read_whole_file(
         station_buffer_t* buffer,
         FILE *file)
 {
@@ -117,7 +117,7 @@ station_fill_buffer_from_file(
 }
 
 bool
-station_resize_buffer(
+station_buffer_resize(
         station_buffer_t *buffer,
         size_t new_size)
 {
@@ -137,7 +137,7 @@ station_resize_buffer(
 }
 
 void
-station_clear_buffer(
+station_buffer_clear(
         station_buffer_t *buffer)
 {
     if (buffer == NULL)

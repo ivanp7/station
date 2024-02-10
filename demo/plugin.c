@@ -7,6 +7,7 @@
 
 #include <station/concurrent.fun.h>
 #include <station/sdl.fun.h>
+#include <station/buffer.fun.h>
 #include <station/font.fun.h>
 
 #include <stdio.h>
@@ -481,17 +482,26 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
 
     resources->window_frozen = false;
 
-    if (inputs->files->num_buffers > 0)
+    if (inputs->num_files > 0)
     {
         // Load a font
-        resources->font = station_load_font_psf2_from_buffer(
-                &inputs->files->buffers[0]);
+        if (station_buffer_read_whole_file(&resources->font_buffer, inputs->files[0]))
+        {
+            resources->font = station_load_font_psf2_from_buffer(&resources->font_buffer);
 
-        if (resources->font == NULL)
-            printf("Couldn't load PSFv2 font from file #0\n");
+            if (resources->font != NULL)
+            {
+                printf("Font size (WxH): %ux%u\n", resources->font->header->width,
+                        resources->font->header->height);
+
+                station_buffer_resize(&resources->font_buffer,
+                        station_font_psf2_glyph_data_size(resources->font->header));
+            }
+            else
+                printf("Couldn't load PSFv2 font from file #0\n");
+        }
         else
-            printf("Font size (WxH): %ux%u\n", resources->font->header->width,
-                    resources->font->header->height);
+            printf("Couldn't read PSFv2 font from file #0\n");
     }
     else
         resources->font = NULL;
@@ -525,6 +535,7 @@ static STATION_PLUGIN_FINAL_FUNC(plugin_final) // implicit arguments: plugin_res
         station_destroy_queue(resources->queue);
 
         station_unload_font_psf2(resources->font);
+        station_buffer_clear(&resources->font_buffer);
     }
 
     if (resources->sdl_window_created)

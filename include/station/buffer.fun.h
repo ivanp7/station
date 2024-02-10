@@ -40,7 +40,7 @@ struct station_buffer;
  * @return Operation success status (true -- success, false -- failure).
  */
 bool
-station_fill_buffer_from_file(
+station_buffer_read_whole_file(
         struct station_buffer *buffer, ///< [in] Buffer to read file contents into.
         FILE *file ///< [in] Binary stream to read buffer contents from.
 );
@@ -53,7 +53,7 @@ station_fill_buffer_from_file(
  * @return Operation success status (true -- success, false -- failure).
  */
 bool
-station_resize_buffer(
+station_buffer_resize(
         struct station_buffer *buffer, ///< [in] Buffer to resize.
         size_t new_size ///< [in] New buffer size in bytes.
 );
@@ -64,7 +64,7 @@ station_resize_buffer(
  * Buffer memory is freed only if it is the buffer's own memory.
  */
 void
-station_clear_buffer(
+station_buffer_clear(
         struct station_buffer *buffer ///< [in] Buffer to clear.
 );
 
