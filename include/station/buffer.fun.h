@@ -46,6 +46,19 @@ station_fill_buffer_from_file(
 );
 
 /**
+ * @brief Resize buffer.
+ *
+ * Buffer can only be resized if its memory is owned.
+ *
+ * @return Operation success status (true -- success, false -- failure).
+ */
+bool
+station_resize_buffer(
+        struct station_buffer *buffer, ///< [in] Buffer to resize.
+        size_t new_size ///< [in] New buffer size in bytes.
+);
+
+/**
  * @brief Clear buffer: release memory, reset fields to default values.
  *
  * Buffer memory is freed only if it is the buffer's own memory.

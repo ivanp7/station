@@ -34,7 +34,7 @@
  */
 typedef struct station_buffer {
     size_t num_bytes; ///< Size of data in bytes.
-    bool own_memory;  ///< Whether memory is owned by buffer.
+    bool own_memory;  ///< Whether memory is owned by buffer (and is allocated on heap).
     void *bytes;      ///< Data (object representation).
 } station_buffer_t;
 

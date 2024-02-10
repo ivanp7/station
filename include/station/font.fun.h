@@ -28,6 +28,7 @@
 
 #include <stddef.h>
 
+struct station_font_psf2_header;
 struct station_font_psf2;
 struct station_buffer;
 
@@ -61,6 +62,19 @@ station_font_psf2_glyph(
 
         size_t *chr_len, ///< [out] Length of the first character in UTF-8 string in bytes.
         const struct station_font_psf2 *font ///< [in] Font.
+);
+
+/**
+ * @brief Get font data size -- full font size minus Unicode table.
+ *
+ * This function can be used to resize font buffer after loading the font
+ * to release Unicode table that is no longer needed.
+ *
+ * @return Font data size.
+ */
+size_t
+station_font_psf2_glyph_data_size(
+        struct station_font_psf2_header *header ///< [in] Font header.
 );
 
 #endif // _STATION_FONT_FUN_H_

@@ -35,7 +35,7 @@ typedef struct station_font_psf2_header {
     uint32_t magic;           ///< Magic bytes to identify PSF.
     uint32_t version;         ///< Zero.
     uint32_t header_size;     ///< Offset of bitmaps in file, 32.
-    uint32_t flags;           ///< 1 if there's unicode table, 0 otherwise.
+    uint32_t flags;           ///< 1 if there's Unicode table, 0 otherwise.
     uint32_t num_glyphs;      ///< Number of glyphs.
     uint32_t bytes_per_glyph; ///< Size of each glyph.
     uint32_t height;          ///< Height in pixels.

@@ -116,6 +116,26 @@ station_fill_buffer_from_file(
     return true;
 }
 
+bool
+station_resize_buffer(
+        station_buffer_t *buffer,
+        size_t new_size)
+{
+    if ((buffer == NULL) || (new_size == 0))
+        return false;
+    else if (!buffer->own_memory)
+        return false;
+
+    void *new_bytes = realloc(buffer->bytes, new_size);
+    if (new_bytes == NULL)
+        return false;
+
+    buffer->bytes = new_bytes;
+    buffer->num_bytes = new_size;
+
+    return true;
+}
+
 void
 station_clear_buffer(
         station_buffer_t *buffer)
@@ -1762,5 +1782,15 @@ station_font_psf2_glyph(
     }
     else
         return NULL;
+}
+
+size_t
+station_font_psf2_glyph_data_size(
+        station_font_psf2_header_t *header)
+{
+    if (header == NULL)
+        return 0;
+
+    return (size_t)header->bytes_per_glyph * header->num_glyphs + header->header_size;
 }
 
