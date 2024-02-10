@@ -32,7 +32,7 @@ option "help" h "Display usage help for app or plugin"
 option "cl-list" C "Display list of OpenCL-compatible hardware" enum typestr="TYPE" values="platforms","devices"
 
 section "Feature options"
-option "file" f "Create data buffer with file contents" string typestr="FILE" multiple
+option "file" f "Open binary file for reading" string typestr="FILE" multiple
 option "threads" j " Create concurrent processing context\n(+: wait on condition variable, -: busy-wait)" int typestr="[±]THREADS" multiple
 option "cl-context" c "Create OpenCL context\n(PID: platform index, DMASK: device mask)" string typestr="PID[:DMASK]" multiple
 option "no-sdl" n "Don't initialize SDL subsystems" multiple

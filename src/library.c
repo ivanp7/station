@@ -76,7 +76,7 @@
 bool
 station_fill_buffer_from_file(
         station_buffer_t* buffer,
-        const char *file)
+        FILE *file)
 {
     if (buffer == NULL)
         return false;
@@ -86,36 +86,34 @@ station_fill_buffer_from_file(
     if (file == NULL)
         return false;
 
-    FILE *fp = fopen(file, "rb");
-    if (fp == NULL)
+    long oldpos = ftell(file);
+    if (oldpos < 0)
         return false;
 
-    void *bytes = NULL;
+    if (fseek(file, 0, SEEK_END) != 0)
+        return false;
 
-    if (fseek(fp, 0, SEEK_END) != 0)
-        goto cleanup;
+    long num_bytes = ftell(file);
+    fseek(file, oldpos, SEEK_SET);
 
-    size_t num_bytes = ftell(fp);
-    rewind(fp);
+    if (num_bytes < 0)
+        return false;
 
-    bytes = malloc(num_bytes);
+    void *bytes = malloc(num_bytes);
     if (bytes == NULL)
-        goto cleanup;
+        return false;
 
-    if (fread(bytes, 1, num_bytes, fp) != num_bytes)
-        goto cleanup;
+    if (fread(bytes, 1, num_bytes, file) != (size_t)num_bytes)
+    {
+        free(bytes);
+        return false;
+    }
 
     *buffer = (station_buffer_t){
         .num_bytes = num_bytes, .own_memory = true, .bytes = bytes,
     };
 
-    fclose(fp);
     return true;
-
-cleanup:
-    free(bytes);
-    fclose(fp);
-    return false;
 }
 
 void

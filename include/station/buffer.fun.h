@@ -26,6 +26,7 @@
 #ifndef _STATION_BUFFER_FUN_H_
 #define _STATION_BUFFER_FUN_H_
 
+#include <stdio.h>
 #include <stdbool.h>
 
 struct station_buffer;
@@ -41,7 +42,7 @@ struct station_buffer;
 bool
 station_fill_buffer_from_file(
         struct station_buffer *buffer, ///< [in] Buffer to read file contents into.
-        const char *file ///< [in] Path to file to read data from.
+        FILE *file ///< [in] Binary stream to read buffer contents from.
 );
 
 /**

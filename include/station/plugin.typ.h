@@ -32,8 +32,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdio.h>
 
-struct station_buffers_array;
 struct station_concurrent_processing_contexts_array;
 struct station_opencl_contexts_array;
 
@@ -66,7 +66,9 @@ typedef struct station_plugin_init_func_inputs {
     station_rt_signal_set_t *rt_signals;   ///< States of real-time signals.
     void *signal_handler_data; ///< Signal handler data.
 
-    struct station_buffers_array *files; ///< File buffers.
+    size_t num_files; ///< Number of file streams.
+    FILE **files;     ///< File streams.
+
     struct station_concurrent_processing_contexts_array *concurrent_processing_contexts; ///< Concurrent processing contexts.
     struct station_opencl_contexts_array *opencl_contexts; ///< OpenCL contexts.
 

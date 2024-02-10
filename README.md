@@ -84,7 +84,7 @@ Alternative mode options:
                                   (possible values="platforms", "devices")
 
 Feature options:
-  -f, --file=FILE               Create data buffer with file contents
+  -f, --file=FILE               Open binary file for reading
   -j, --threads=[±]THREADS      Create concurrent processing context
                                   (+: wait on condition variable, -: busy-wait)
   -c, --cl-context=PID[:DMASK]  Create OpenCL context

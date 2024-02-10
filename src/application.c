@@ -239,7 +239,10 @@ static struct {
         void *resources;
     } plugin;
 
-    station_buffers_array_t files;
+    struct {
+        unsigned int count;
+        FILE **streams;
+    } file;
 
     struct {
         station_std_signal_set_t std_set;
@@ -300,7 +303,7 @@ static void exit_destroy_concurrent_processing_contexts(void);
 static void exit_quit_sdl(void);
 #endif
 
-static void exit_destroy_buffers(void);
+static void exit_close_files(void);
 
 static void exit_end_plugin_help_fn_output(void);
 static void exit_end_plugin_conf_fn_output(void);
@@ -966,9 +969,9 @@ static void initialize(int argc, char *argv[])
     application.plugin.configuration.sdl_is_used = false;
 #endif
 
-    application.files.num_buffers = application.plugin.configuration.num_files_used;
-    if (application.files.num_buffers > application.args.file_given)
-        application.files.num_buffers = application.args.file_given;
+    application.file.count = application.plugin.configuration.num_files_used;
+    if (application.file.count > application.args.file_given)
+        application.file.count = application.args.file_given;
 
     ///////////////////////////////////////
     // Display application configuration //
@@ -1133,17 +1136,17 @@ static void initialize(int argc, char *argv[])
         }
 #endif
 
-        if ((application.files.num_buffers > 0) || (application.args.file_given > 0))
+        if ((application.file.count > 0) || (application.args.file_given > 0))
         {
-            PRINT_("Files: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.files.num_buffers);
+            PRINT_("Files: " COLOR_NUMBER "%u" COLOR_RESET, application.file.count);
 
-            if (application.args.file_given > application.files.num_buffers)
+            if (application.args.file_given > application.file.count)
                 PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
-                        (unsigned long)(application.args.file_given - application.files.num_buffers));
+                        (unsigned long)(application.args.file_given - application.file.count));
 
             PRINT("\n");
 
-            for (unsigned i = 0; i < application.files.num_buffers; i++)
+            for (unsigned i = 0; i < application.file.count; i++)
                 PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n", i, application.args.file_arg[i]);
         }
@@ -1155,29 +1158,28 @@ static void initialize(int argc, char *argv[])
     // Create buffers from files //
     ///////////////////////////////
 
-    if (application.files.num_buffers > 0)
+    if (application.file.count > 0)
     {
-        application.files.buffers = malloc(
-                sizeof(*application.files.buffers) * application.files.num_buffers);
-        if (application.files.buffers == NULL)
+        application.file.streams = malloc(
+                sizeof(*application.file.streams) * application.file.count);
+        if (application.file.streams == NULL)
         {
-            ERROR("couldn't allocate array of file buffers");
+            ERROR("couldn't allocate array of file streams");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
-        for (unsigned i = 0; i < application.files.num_buffers; i++)
-            application.files.buffers[i] = (station_buffer_t){0};
+        for (unsigned i = 0; i < application.file.count; i++)
+            application.file.streams[i] = NULL;
 
-        AT_EXIT(exit_destroy_buffers);
+        AT_EXIT(exit_close_files);
 
-        for (unsigned i = 0; i < application.files.num_buffers; i++)
+        for (unsigned i = 0; i < application.file.count; i++)
         {
-            bool success = station_fill_buffer_from_file(
-                    &application.files.buffers[i], application.args.file_arg[i]);
+            application.file.streams[i] = fopen(application.args.file_arg[i], "rb");
 
-            if (!success)
+            if (application.file.streams[i] == NULL)
             {
-                ERROR_("couldn't create buffer from file ["
+                ERROR_("couldn't open file ["
                         COLOR_NUMBER "%u" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n",
                         i, application.args.file_arg[i]);
@@ -1374,15 +1376,16 @@ static void exit_quit_sdl(void)
 }
 #endif
 
-static void exit_destroy_buffers(void)
+static void exit_close_files(void)
 {
     EXIT_ASSERT_MAIN_THREAD();
 
-    if (application.files.buffers != NULL)
-        for (size_t i = 0; i < application.files.num_buffers; i++)
-            station_clear_buffer(&application.files.buffers[i]);
+    if (application.file.streams != NULL)
+        for (size_t i = 0; i < application.file.count; i++)
+            if (application.file.streams[i] != NULL)
+                fclose(application.file.streams[i]);
 
-    free(application.files.buffers);
+    free(application.file.streams);
 }
 
 static void exit_end_plugin_help_fn_output(void)
@@ -1431,7 +1434,8 @@ static int run(void)
             .std_signals = &application.signal.std_set,
             .rt_signals = &application.signal.rt_set,
             .signal_handler_data = application.plugin.configuration.signal_handler_data,
-            .files = &application.files,
+            .num_files = application.file.count,
+            .files = application.file.streams,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,
             .opencl_contexts = &application.opencl.contexts,
             .sdl_is_available = application.plugin.configuration.sdl_is_used,
