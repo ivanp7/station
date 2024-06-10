@@ -1470,6 +1470,7 @@ static int run(void)
     // Execute the finite state machine //
     //////////////////////////////////////
 
+    if (application.fsm.state.sfunc != NULL)
     {
         if (application.verbose)
         {
