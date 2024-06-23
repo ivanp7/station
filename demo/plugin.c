@@ -444,6 +444,8 @@ static STATION_PLUGIN_INIT_FUNC(plugin_init) // implicit arguments: inputs, outp
         exit(1);
     }
 
+    *resources = (struct plugin_resources){0};
+
     outputs->plugin_resources = resources;
 
     outputs->fsm_initial_state.sfunc = sfunc_pre; // begin FSM execution from sfunc_pre()
