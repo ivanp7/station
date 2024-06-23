@@ -68,8 +68,8 @@ do
             BUILD_TYPE="optimized"
             ;;
 
-        A) # feature: enable use of ANSI escape codes in application output
-            FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED="true"
+        D) # feature: enable support for shared libraries
+            FEATURE_IS_DLFCN_SUPPORTED="true"
             ;;
 
         C) # feature: enable support for concurrent processing
@@ -92,6 +92,10 @@ do
             FEATURE_IS_QUEUE_LARGER_CAPACITY_ENABLED="true"
             ;;
 
+        A) # feature: enable use of ANSI escape codes in application output
+            FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED="true"
+            ;;
+
         *) # display help
             usage
     esac
@@ -109,6 +113,15 @@ done
 : ${INSTALL_PREFIX:="${PROJECT_DIR}"}
 : ${INSTALL_IDIR:="${IDIR}"}
 : ${INSTALL_LDIR:="${ODIR}"}
+
+if [ "${FEATURE_IS_DLFCN_SUPPORTED:-}" ]
+then
+    CFLAGS_DLFCN=""
+    LFLAGS_DLFCN="-ldl"
+else
+    CFLAGS_DLFCN=""
+    LFLAGS_DLFCN=""
+fi
 
 if [ "${FEATURE_IS_SDL_SUPPORTED:-}" ]
 then
@@ -128,12 +141,13 @@ else
     LFLAGS_OPENCL=""
 fi
 
-CFLAGS_COMMON="$CFLAGS_SDL $CFLAGS_OPENCL \
+CFLAGS_COMMON="$CFLAGS_DLFCN $CFLAGS_SDL $CFLAGS_OPENCL \
+${FEATURE_IS_DLFCN_SUPPORTED:+"-DSTATION_IS_DLFCN_SUPPORTED"} \
 ${FEATURE_IS_CONCURRENT_PROCESSING_SUPPORTED:+"-pthread -DSTATION_IS_CONCURRENT_PROCESSING_SUPPORTED"} \
 ${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:+"-DSTATION_IS_SIGNAL_MANAGEMENT_SUPPORTED"} \
 ${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
 ${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"}"
-LFLAGS_COMMON="$LFLAGS_SDL $LFLAGS_OPENCL"
+LFLAGS_COMMON="$LFLAGS_DLFCN $LFLAGS_SDL $LFLAGS_OPENCL"
 
 case "${BUILD_TYPE:-}" in
     "debug") CFLAGS_BUILD_TYPE="-O0 -g3 -ggdb" ;; # -Og causes <optimized out> errors in gdb
@@ -157,10 +171,8 @@ CFLAGS_LIBRARY="${OUTPUT_LIBRARY_SHARED:+"-fPIC"} \
 ${FEATURE_IS_QUEUE_LARGER_CAPACITY_ENABLED:+"-DSTATION_IS_QUEUE_LARGER_CAPACITY_ENABLED"}"
 CFLAGS_APPLICATION="-I${PROJECT_DIR}/${ODIR} \
 ${FEATURE_IS_ANSI_ESCAPE_CODES_ENABLED:+"-DSTATION_IS_ANSI_ESCAPE_CODES_ENABLED"}"
-CFLAGS_APPLICATION_DLFCN="-DSTATION_IS_DLFCN_SUPPORTED"
 
 LFLAGS="$LFLAGS_COMMON"
-LFLAGS_APPLICATION_DLFCN="-ldl"
 
 ###############################################################################
 # Generate pkg-config files
@@ -196,9 +208,7 @@ cat <<  _EOF_ > "${PROJECT_DIR}/${NINJA}"
 cflags = $CFLAGS ${CFLAGS_DIAGNOSTICS:-}
 cflags_lib = $CFLAGS_LIBRARY
 cflags_app = $CFLAGS_APPLICATION
-cflags_app_dlfcn = $CFLAGS_APPLICATION $CFLAGS_APPLICATION_DLFCN
 lflags = $LFLAGS
-lflags_app_dlfcn = $LFLAGS_APPLICATION_DLFCN
 
 
 rule gengetopt
@@ -253,21 +263,18 @@ build ${ODIR}/${FILE_APPLICATION_ARGS}.h ${ODIR}/${FILE_APPLICATION_ARGS}.c: gen
 build ${ODIR}/${FILE_APPLICATION_ARGS}.o: cc ${ODIR}/${FILE_APPLICATION_ARGS}.c
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${FILE_APPLICATION}.builtin.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
+build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
     cflags_custom = \$cflags_app
-
-build ${ODIR}/${FILE_APPLICATION}.dlfcn.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
-    cflags_custom = \$cflags_app_dlfcn
 
 build ${ODIR}/${FILE_APPLICATION_ENTRY}.o: cc ${SDIR}/${FILE_APPLICATION_ENTRY}.c
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.builtin.o
+build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.dlfcn.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
-    cflags_custom = \$cflags_app_dlfcn
-    lflags_custom = \$lflags_app_dlfcn
+build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
+    cflags_custom = \$cflags_app
+    lflags_custom = \$lflags_app
 
 build application-lib: phony ${ODIR}/${OUT_APPLICATION_LIB}
 build application: phony ${ODIR}/${OUT_APPLICATION}

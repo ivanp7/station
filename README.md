@@ -72,7 +72,7 @@ station-app [options...] [PLUGIN_FILE [-- [plugin options...]]]
 
 Usage:
 
-  -A, --argfile=FILE            Parse arguments from file
+  -A, --argfile=PATH            Parse arguments from file
 
 Output options:
   -v, --verbose                 Display more information
@@ -84,7 +84,8 @@ Alternative mode options:
                                   (possible values="platforms", "devices")
 
 Feature options:
-  -f, --file=FILE               Open binary file for reading
+  -f, --file=PATH               Open binary file for reading
+  -l, --library=PATH            Open shared library
   -j, --threads=[±]THREADS      Create concurrent processing context
                                   (+: wait on condition variable, -: busy-wait)
   -c, --cl-context=PID[:DMASK]  Create OpenCL context

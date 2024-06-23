@@ -240,9 +240,14 @@ static struct {
     } plugin;
 
     struct {
-        unsigned int count;
+        size_t count;
         FILE **streams;
     } file;
+
+    struct {
+        size_t count;
+        void **handles;
+    } library;
 
     struct {
         station_std_signal_set_t std_set;
@@ -301,6 +306,10 @@ static void exit_destroy_concurrent_processing_contexts(void);
 
 #ifdef STATION_IS_SDL_SUPPORTED
 static void exit_quit_sdl(void);
+#endif
+
+#ifdef STATION_IS_DLFCN_SUPPORTED
+static void exit_close_libraries(void);
 #endif
 
 static void exit_close_files(void);
@@ -553,12 +562,12 @@ static void initialize(int argc, char *argv[])
         }
 
         PRINT("[");
-#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+#ifdef STATION_IS_DLFCN_SUPPORTED
         PRINT(COLOR_FLAG_ON "  supported  ");
 #else
         PRINT(COLOR_FLAG_OFF "not supported");
 #endif
-        PRINT(COLOR_RESET "] Concurrent processing\n");
+        PRINT(COLOR_RESET "] Shared libraries\n");
 
         PRINT("[");
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
@@ -567,6 +576,14 @@ static void initialize(int argc, char *argv[])
         PRINT(COLOR_FLAG_OFF "not supported");
 #endif
         PRINT(COLOR_RESET "] Signal management\n");
+
+        PRINT("[");
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
+        PRINT(COLOR_FLAG_ON "  supported  ");
+#else
+        PRINT(COLOR_FLAG_OFF "not supported");
+#endif
+        PRINT(COLOR_RESET "] Concurrent processing\n");
 
         PRINT("[");
 #ifdef STATION_IS_OPENCL_SUPPORTED
@@ -814,6 +831,12 @@ static void initialize(int argc, char *argv[])
         }
         AT_EXIT(exit_unload_plugin);
     }
+#else
+    if (!application.plugin.built_in)
+    {
+        ERROR("couldn't load plugin because shared libraries are not supported");
+        exit(STATION_APP_ERROR_PLUGIN);
+    }
 #endif
 
     //////////////////////////
@@ -973,6 +996,10 @@ static void initialize(int argc, char *argv[])
     if (application.file.count > application.args.file_given)
         application.file.count = application.args.file_given;
 
+    application.library.count = application.plugin.configuration.num_libraries_used;
+    if (application.library.count > application.args.library_given)
+        application.library.count = application.args.library_given;
+
     ///////////////////////////////////////
     // Display application configuration //
     ///////////////////////////////////////
@@ -1055,9 +1082,9 @@ static void initialize(int argc, char *argv[])
 
             PRINT("\n");
 
-            for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+            for (size_t i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
             {
-                PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: ", i);
+                PRINT_("  [" COLOR_NUMBER "%lu" COLOR_RESET "]: ", (unsigned long)i);
 
                 int threads = application.args.threads_arg[i];
 
@@ -1084,13 +1111,13 @@ static void initialize(int argc, char *argv[])
 
             PRINT("\n");
 
-            for (unsigned i = 0; i < application.opencl.contexts.num_contexts; i++)
+            for (size_t i = 0; i < application.opencl.contexts.num_contexts; i++)
             {
                 cl_uint platform_idx = strtoul(
                         application.args.cl_context_arg[i], (char**)NULL, 16);
 
-                PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
-                        "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", i, platform_idx);
+                PRINT_("  [" COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        "platform #" COLOR_NUMBER "%x" COLOR_RESET ", ", (unsigned long)i, platform_idx);
 
                 const char *device_mask = strchr(application.args.cl_context_arg[i], ':');
                 if (device_mask != NULL)
@@ -1138,7 +1165,7 @@ static void initialize(int argc, char *argv[])
 
         if ((application.file.count > 0) || (application.args.file_given > 0))
         {
-            PRINT_("Files: " COLOR_NUMBER "%u" COLOR_RESET, application.file.count);
+            PRINT_("Files: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.file.count);
 
             if (application.args.file_given > application.file.count)
                 PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
@@ -1146,12 +1173,29 @@ static void initialize(int argc, char *argv[])
 
             PRINT("\n");
 
-            for (unsigned i = 0; i < application.file.count; i++)
-                PRINT_("  [" COLOR_NUMBER "%u" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n", i, application.args.file_arg[i]);
+            for (size_t i = 0; i < application.file.count; i++)
+                PRINT_("  [" COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n", (unsigned long)i, application.args.file_arg[i]);
         }
 
         PRINT("\n");
+
+#ifdef STATION_IS_DLFCN_SUPPORTED
+        if ((application.library.count > 0) || (application.args.library_given > 0))
+        {
+            PRINT_("Libraries: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.library.count);
+
+            if (application.args.library_given > application.library.count)
+                PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                        (unsigned long)(application.args.library_given - application.library.count));
+
+            PRINT("\n");
+
+            for (size_t i = 0; i < application.library.count; i++)
+                PRINT_("  [" COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n", (unsigned long)i, application.args.library_arg[i]);
+        }
+#endif
     }
 
     ///////////////////////////////
@@ -1168,25 +1212,61 @@ static void initialize(int argc, char *argv[])
             exit(STATION_APP_ERROR_MALLOC);
         }
 
-        for (unsigned i = 0; i < application.file.count; i++)
+        for (size_t i = 0; i < application.file.count; i++)
             application.file.streams[i] = NULL;
 
         AT_EXIT(exit_close_files);
 
-        for (unsigned i = 0; i < application.file.count; i++)
+        for (size_t i = 0; i < application.file.count; i++)
         {
             application.file.streams[i] = fopen(application.args.file_arg[i], "rb");
 
             if (application.file.streams[i] == NULL)
             {
                 ERROR_("couldn't open file ["
-                        COLOR_NUMBER "%u" COLOR_RESET "]: "
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET "\n",
-                        i, application.args.file_arg[i]);
+                        (unsigned long)i, application.args.file_arg[i]);
                 exit(STATION_APP_ERROR_FILE);
             }
         }
     }
+
+    ////////////////////////////
+    // Load shared libraries ///
+    ////////////////////////////
+
+#ifdef STATION_IS_DLFCN_SUPPORTED
+    if (application.library.count > 0)
+    {
+        application.library.handles = malloc(
+                sizeof(*application.library.handles) * application.library.count);
+        if (application.library.handles == NULL)
+        {
+            ERROR("couldn't allocate array of shared library handles");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (size_t i = 0; i < application.library.count; i++)
+            application.library.handles[i] = NULL;
+
+        AT_EXIT(exit_close_libraries);
+
+        for (size_t i = 0; i < application.library.count; i++)
+        {
+            application.library.handles[i] = dlopen(application.args.library_arg[i], RTLD_LAZY | RTLD_GLOBAL);
+
+            if (application.library.handles[i] == NULL)
+            {
+                ERROR_("couldn't open shared library ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, application.args.library_arg[i]);
+                exit(STATION_APP_ERROR_LIBRARY);
+            }
+        }
+    }
+#endif
 
     ////////////////////////////////////
     // Start signal management thread //
@@ -1227,13 +1307,13 @@ static void initialize(int argc, char *argv[])
             exit(STATION_APP_ERROR_MALLOC);
         }
 
-        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+        for (size_t i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
             application.concurrent_processing.contexts.contexts[i].state = NULL;
 
         AT_EXIT(exit_destroy_concurrent_processing_contexts);
         AT_QUICK_EXIT(exit_destroy_concurrent_processing_contexts);
 
-        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+        for (size_t i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
         {
             station_threads_number_t num_threads;
             bool busy_wait;
@@ -1256,8 +1336,8 @@ static void initialize(int argc, char *argv[])
             if (code != 0)
             {
                 ERROR_("couldn't create concurrent processing context ["
-                        COLOR_NUMBER "%u" COLOR_RESET "], got error "
-                        COLOR_ERROR "%i" COLOR_RESET, i, code);
+                        COLOR_NUMBER "%lu" COLOR_RESET "], got error "
+                        COLOR_ERROR "%i" COLOR_RESET, (unsigned long)i, code);
                 exit(STATION_APP_ERROR_THREADS);
             }
         }
@@ -1361,7 +1441,7 @@ static void exit_destroy_concurrent_processing_contexts(void)
     EXIT_ASSERT_MAIN_THREAD();
 
     if (application.concurrent_processing.contexts.contexts != NULL)
-        for (unsigned i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
+        for (size_t i = 0; i < application.concurrent_processing.contexts.num_contexts; i++)
             station_concurrent_processing_destroy_context(&application.concurrent_processing.contexts.contexts[i]);
 
     free(application.concurrent_processing.contexts.contexts);
@@ -1373,6 +1453,20 @@ static void exit_quit_sdl(void)
     EXIT_ASSERT_MAIN_THREAD();
 
     SDL_Quit();
+}
+#endif
+
+#ifdef STATION_IS_DLFCN_SUPPORTED
+static void exit_close_libraries(void)
+{
+    EXIT_ASSERT_MAIN_THREAD();
+
+    if (application.library.handles != NULL)
+        for (size_t i = 0; i < application.library.count; i++)
+            if (application.library.handles[i] != NULL)
+                dlclose(application.library.handles[i]);
+
+    free(application.library.handles);
 }
 #endif
 
@@ -1436,6 +1530,8 @@ static int run(void)
             .signal_handler_data = application.plugin.configuration.signal_handler_data,
             .num_files = application.file.count,
             .files = application.file.streams,
+            .num_libraries = application.library.count,
+            .libraries = application.library.handles,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,
             .opencl_contexts = &application.opencl.contexts,
             .sdl_is_available = application.plugin.configuration.sdl_is_used,

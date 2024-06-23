@@ -48,9 +48,11 @@ typedef struct station_plugin_conf_func_args {
     station_signal_handler_func_t signal_handler; ///< Signal handler.
     void *signal_handler_data; ///< Signal handler data.
 
-    size_t num_files_used; ///< Whether files are used and should be read.
-    size_t num_concurrent_processing_contexts_used; ///< Whether concurrent processing is used and should be initialized.
-    size_t num_opencl_contexts_used; ///< Whether OpenCL is used and should be initialized.
+    size_t num_files_used; ///< Number of files that are used and maximum number to be read.
+    size_t num_libraries_used; ///< Number of shared libraries that are used and maximum number to be loaded.
+
+    size_t num_concurrent_processing_contexts_used; ///< Number of concurrent processing contexts that are used and maximum number to be initialized.
+    size_t num_opencl_contexts_used; ///< Number of OpenCL contexts that are used and maximum number to be initialized.
 
     bool sdl_is_used; ///< Whether SDL is used and should be initialized.
     uint32_t sdl_init_flags; ///< Flags to pass to SDL_Init() call.
@@ -68,6 +70,9 @@ typedef struct station_plugin_init_func_inputs {
 
     size_t num_files; ///< Number of file streams.
     FILE **files;     ///< File streams.
+
+    size_t num_libraries; ///< Number of shared libraries handles.
+    void **libraries;     ///< Shared libraries handles.
 
     struct station_concurrent_processing_contexts_array *concurrent_processing_contexts; ///< Concurrent processing contexts.
     struct station_opencl_contexts_array *opencl_contexts; ///< OpenCL contexts.
