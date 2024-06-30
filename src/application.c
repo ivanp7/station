@@ -25,6 +25,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
+#include <argp.h>
 
 #if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
 #  undef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
@@ -68,8 +71,6 @@
 
 #include <station/buffer.fun.h>
 #include <station/buffer.typ.h>
-
-#include "application.args.h"
 
 /*****************************************************************************/
 
@@ -222,8 +223,184 @@
 
 /*****************************************************************************/
 
+enum args_keys {
+    ARGKEY_HELP = 'h',
+    ARGKEY_USAGE = '?',
+    ARGKEY_VERSION = 0xFF,
+
+    ARGKEY_LOGO = '@',
+    ARGKEY_VERBOSE = 'v',
+
+    ARGKEY_CL_LIST = 'C',
+
+    ARGKEY_PLUGIN_HELP = 'H',
+
+    ARGKEY_FILE = 'f',
+    ARGKEY_LIBRARY = 'l',
+    ARGKEY_THREADS = 'j',
+    ARGKEY_CL_CONTEXT = 'c',
+    ARGKEY_NO_SDL = 'n',
+
+    ARGKEY_SIGNAL_FIRST = 0x100,
+
+    ARGKEY_SIGINT = ARGKEY_SIGNAL_FIRST,
+    ARGKEY_SIGQUIT,
+    ARGKEY_SIGTERM,
+
+    ARGKEY_SIGCHLD,
+    ARGKEY_SIGCONT,
+    ARGKEY_SIGTSTP,
+    ARGKEY_SIGXCPU,
+    ARGKEY_SIGXFSZ,
+
+    ARGKEY_SIGPIPE,
+    ARGKEY_SIGPOLL,
+    ARGKEY_SIGURG,
+
+    ARGKEY_SIGALRM,
+    ARGKEY_SIGVTALRM,
+    ARGKEY_SIGPROF,
+
+    ARGKEY_SIGHUP,
+    ARGKEY_SIGTTIN,
+    ARGKEY_SIGTTOU,
+    ARGKEY_SIGWINCH,
+
+    ARGKEY_SIGUSR1,
+    ARGKEY_SIGUSR2,
+    ARGKEY_SIGRTMIN,
+    ARGKEY_SIGRTMAX,
+
+    ARGKEY_SIGNAL_LAST = ARGKEY_SIGRTMAX,
+};
+
+struct argp_option args_options[] = {
+    {.name = "help", .key = ARGKEY_HELP, .doc = "Display this help list", .group = -1},
+    {.name = "usage", .key = ARGKEY_USAGE, .doc = "Display a short usage message", .group = -1},
+    {.name = "version", .key = ARGKEY_VERSION, .doc = "Display application version", .group = -1},
+
+    {.doc = "Output options:"},
+    {.name = "logo", .key = ARGKEY_LOGO, .doc = "Display application logo"},
+    {.name = "verbose", .key = ARGKEY_VERBOSE, .doc = "Display more information"},
+
+    {.name = "cl-list", .key = ARGKEY_CL_LIST, .arg = "TYPE", .doc = "Display list of OpenCL-compatible hardware (platforms, devices)"},
+
+    {.doc = "Alternative modes:"},
+    {.name = "plugin-help", .key = ARGKEY_PLUGIN_HELP, .doc = "Display plugin help"},
+
+    {.doc = "Feature options:"},
+    {.name = "file", .key = ARGKEY_FILE, .arg = "PATH", .doc = "Open binary file for reading"},
+    {.name = "library", .key = ARGKEY_LIBRARY, .arg = "PATH", .doc = "Open shared library"},
+    {.name = "threads", .key = ARGKEY_THREADS, .arg = "[±]THREADS", .doc = " Create concurrent processing context\n(+: wait on condition variable, -: busy-wait)"},
+    {.name = "cl-context", .key = ARGKEY_CL_CONTEXT, .arg = "PID[:DMASK]", .doc = "Create OpenCL context\n(PID: platform index, DMASK: device mask)"},
+    {.name = "no-sdl", .key = ARGKEY_NO_SDL, .doc = "Don't initialize SDL subsystems"},
+
+    {.doc = "Signal management (interruption events):"},
+    {.name = "SIGINT", .key = ARGKEY_SIGINT, .doc = "Catch <interruption request>"},
+    {.name = "SIGQUIT", .key = ARGKEY_SIGQUIT, .doc = "Catch <quit request>"},
+    {.name = "SIGTERM", .key = ARGKEY_SIGTERM, .doc = "Catch <termination request>"},
+
+    {.doc = "Signal management (process events):"},
+    {.name = "SIGCHLD", .key = ARGKEY_SIGCHLD, .doc = "Catch <child stopped or terminated>"},
+    {.name = "SIGCONT", .key = ARGKEY_SIGCONT, .doc = "Catch <continue if stopped>"},
+    {.name = "SIGTSTP", .key = ARGKEY_SIGTSTP, .doc = "Catch <stop request>"},
+    {.name = "SIGXCPU", .key = ARGKEY_SIGXCPU, .doc = "Catch <CPU time limit exceeded>"},
+    {.name = "SIGXFSZ", .key = ARGKEY_SIGXFSZ, .doc = "Catch <file size limit exceeded>"},
+
+    {.doc = "Signal management (input/output events):"},
+    {.name = "SIGPIPE", .key = ARGKEY_SIGPIPE, .doc = "Catch <broken pipe>"},
+    {.name = "SIGPOLL", .key = ARGKEY_SIGPOLL, .doc = "Catch <pollable event>"},
+    {.name = "SIGURG", .key = ARGKEY_SIGURG, .doc = "Catch <urgent condition on socket>"},
+
+    {.doc = "Signal management (timer events):"},
+    {.name = "SIGALRM", .key = ARGKEY_SIGALRM, .doc = "Catch <timer signal from alarm>"},
+    {.name = "SIGVTALRM", .key = ARGKEY_SIGVTALRM, .doc = "Catch <virtual alarm clock>"},
+    {.name = "SIGPROF", .key = ARGKEY_SIGPROF, .doc = "Catch <profiling timer expired>"},
+
+    {.doc = "Signal management (terminal events):"},
+    {.name = "SIGHUP", .key = ARGKEY_SIGHUP, .doc = "Catch <terminal hangup>"},
+    {.name = "SIGTTIN", .key = ARGKEY_SIGTTIN, .doc = "Catch <terminal input for background process>"},
+    {.name = "SIGTTOU", .key = ARGKEY_SIGTTOU, .doc = "Catch <terminal output for background process>"},
+    {.name = "SIGWINCH", .key = ARGKEY_SIGWINCH, .doc = "Catch <terminal resized>"},
+
+    {.doc = "Signal management (user-defined):"},
+    {.name = "SIGUSR1", .key = ARGKEY_SIGUSR1, .doc = "Catch <user-defined signal 1>"},
+    {.name = "SIGUSR2", .key = ARGKEY_SIGUSR2, .doc = "Catch <user-defined signal 2>"},
+    {.name = "SIGRTMIN", .key = ARGKEY_SIGRTMIN, .arg = "+n", .doc = "Catch <real-time signal MIN+n>"},
+    {.name = "SIGRTMAX", .key = ARGKEY_SIGRTMAX, .arg = "-n", .doc = "Catch <real-time signal MAX-n>"},
+
+    {0}
+};
+
+/*****************************************************************************/
+
+enum argtype_cl_list {
+    ARGTYPE_CL_LIST_PLATFORMS,
+    ARGTYPE_CL_LIST_DEVICES,
+};
+
+struct application_args
+{
+    bool logo_given;
+    bool verbose_given;
+
+    bool cl_list_given;
+    enum argtype_cl_list cl_list_arg;
+
+    bool plugin_help_given;
+
+    unsigned file_given;
+    unsigned file_cur;
+    char **file_arg;
+
+    unsigned library_given;
+    unsigned library_cur;
+    char **library_arg;
+
+    unsigned threads_given;
+    unsigned threads_cur;
+    long *threads_arg;
+
+    unsigned cl_context_given;
+    unsigned cl_context_cur;
+    char **cl_context_arg;
+
+    bool no_sdl_given;
+
+    bool SIGINT_given;
+    bool SIGQUIT_given;
+    bool SIGTERM_given;
+    bool SIGCHLD_given;
+    bool SIGCONT_given;
+    bool SIGTSTP_given;
+    bool SIGXCPU_given;
+    bool SIGXFSZ_given;
+    bool SIGPIPE_given;
+    bool SIGPOLL_given;
+    bool SIGURG_given;
+    bool SIGALRM_given;
+    bool SIGVTALRM_given;
+    bool SIGPROF_given;
+    bool SIGHUP_given;
+    bool SIGTTIN_given;
+    bool SIGTTOU_given;
+    bool SIGWINCH_given;
+    bool SIGUSR1_given;
+    bool SIGUSR2_given;
+
+    unsigned SIGRTMIN_given;
+    unsigned SIGRTMIN_cur;
+    long *SIGRTMIN_arg;
+
+    unsigned SIGRTMAX_given;
+    unsigned SIGRTMAX_cur;
+    long *SIGRTMAX_arg;
+
+    char *plugin_arg;
+};
+
 static struct {
-    struct gengetopt_args_info args;
+    struct application_args args;
     bool verbose;
 
     struct {
@@ -327,6 +504,11 @@ static void exit_finalize_plugin_quick(void);
 
 static void exit_end_plugin_init_fn_output(void);
 static void exit_end_plugin_exec_fn_output(void);
+
+/*****************************************************************************/
+
+static error_t args_parse_1(int key, char *arg, struct argp_state *state);
+static error_t args_parse_2(int key, char *arg, struct argp_state *state);
 
 /*****************************************************************************/
 
@@ -485,39 +667,47 @@ static void initialize(int argc, char *argv[])
         // Parse application arguments //
         /////////////////////////////////
 
-        args_parser_init(&application.args);
-        AT_EXIT(exit_release_args);
+        struct argp args_parser = {
+            .options = args_options,
+            .parser = args_parse_1,
+            .args_doc = application.plugin.built_in ?
+                "[-- [plugin arguments...]]" :
+                "PLUGIN_FILE [-- [plugin arguments...]]",
+        };
 
-        if (args_parser(app_argc, argv, &application.args) != 0)
+        error_t err = argp_parse(&args_parser, app_argc, argv,
+                ARGP_NO_EXIT | ARGP_NO_HELP, NULL, &application.args);
+
+        if (err == 0)
         {
-            ERROR("couldn't parse application arguments");
-            exit(STATION_APP_ERROR_ARGUMENTS);
+            args_parser.parser = args_parse_2;
+
+            err = argp_parse(&args_parser, app_argc, argv,
+                    ARGP_NO_EXIT | ARGP_NO_HELP, NULL, &application.args);
+
+            AT_EXIT(exit_release_args);
         }
-    }
 
-    ////////////////////////////////////////////
-    // Parse application arguments from files //
-    ////////////////////////////////////////////
-
-    {
-        struct args_parser_params params;
-        args_parser_params_init(&params);
-
-        params.override = 0;
-        params.initialize = 0;
-        params.check_required = 1;
-        params.check_ambiguity = 0;
-        params.print_errors = 1;
-
-        for (unsigned i = 0; i < application.args.argfile_given; i++)
+        switch (err)
         {
-            if (args_parser_config_file(application.args.argfile_arg[i],
-                        &application.args, &params) != 0)
-            {
-                ERROR_("couldn't parse arguments from file "
-                        COLOR_STRING "%s" COLOR_RESET, application.args.argfile_arg[i]);
+            case 0:
+                break;
+
+            case ENOMEM:
+                ERROR("couldn't parse application arguments (memory allocation error)");
+                exit(STATION_APP_ERROR_MALLOC);
+
+            case E2BIG:
+                ERROR("couldn't parse application arguments (argument list too big)");
                 exit(STATION_APP_ERROR_ARGUMENTS);
-            }
+
+            case EINVAL:
+                ERROR("couldn't parse application arguments (invalid argument)");
+                exit(STATION_APP_ERROR_ARGUMENTS);
+
+            default:
+                ERROR("couldn't parse application arguments");
+                exit(STATION_APP_ERROR_ARGUMENTS);
         }
     }
 
@@ -608,186 +798,123 @@ static void initialize(int argc, char *argv[])
     // Check correctness of application arguments //
     ////////////////////////////////////////////////
 
-    if (application.plugin.built_in && (application.args.inputs_num > 0))
+    if (application.plugin.built_in && (application.args.plugin_arg != NULL))
     {
-        ERROR("a application with built-in plugin doesn't accept plugin file argument");
+        ERROR("an application with built-in plugin doesn't accept plugin file argument");
         exit(STATION_APP_ERROR_ARGUMENTS);
     }
-
-    if (application.args.cl_list_given)
-    {
-#ifdef STATION_IS_OPENCL_SUPPORTED
-        if (application.args.inputs_num > 0)
-        {
-            ERROR("processing a plugin file after displaying list of OpenCL platforms/devices is not supported");
-            exit(STATION_APP_ERROR_ARGUMENTS);
-        }
-
-        if (application.args.help_given)
-        {
-            ERROR("OpenCL listing mode is mutually exclusive with help mode");
-            exit(STATION_APP_ERROR_ARGUMENTS);
-        }
-#else
-        ERROR("OpenCL is not supported");
-        exit(STATION_APP_ERROR_ARGUMENTS);
-#endif
-    }
-    else if (application.args.help_given)
-    {
-        if (application.args.inputs_num > 1)
-        {
-            ERROR("cannot process more than one plugin file");
-            exit(STATION_APP_ERROR_ARGUMENTS);
-        }
-    }
-    else
-    {
-        if (application.args.inputs_num > 1)
-        {
-            ERROR("cannot process more than one plugin file");
-            exit(STATION_APP_ERROR_ARGUMENTS);
-        }
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
-        for (unsigned i = 0; i < application.args.SIGRTMIN_given; i++)
+    for (unsigned i = 0; i < application.args.SIGRTMIN_given; i++)
+    {
+        long signal = application.args.SIGRTMIN_arg[i];
+
+        if (signal < 0)
         {
-            int signal = application.args.SIGRTMIN_arg[i];
-
-            if (signal < 0)
-            {
-                ERROR_("real-time signal number can't be less than SIGRTMIN (argument ["
-                        COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                exit(STATION_APP_ERROR_ARGUMENTS);
-            }
-            else if (signal + SIGRTMIN > SIGRTMAX)
-            {
-                ERROR_("real-time signal number SIGRTMIN%+i (argument ["
-                        COLOR_NUMBER "%u" COLOR_RESET "]) is greater than SIGRTMAX", signal, i);
-                exit(STATION_APP_ERROR_ARGUMENTS);
-            }
+            ERROR_("real-time signal number can't be less than SIGRTMIN (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "])", i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
-
-        for (unsigned i = 0; i < application.args.SIGRTMAX_given; i++)
+        else if (signal + SIGRTMIN > SIGRTMAX)
         {
-            int signal = application.args.SIGRTMAX_arg[i];
-
-            if (signal > 0)
-            {
-                ERROR_("real-time signal number can't be greater than SIGRTMAX (argument ["
-                        COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                exit(STATION_APP_ERROR_ARGUMENTS);
-            }
-            else if (signal + SIGRTMAX < SIGRTMIN)
-            {
-                ERROR_("real-time signal number SIGRTMAX%+i (argument ["
-                        COLOR_NUMBER "%u" COLOR_RESET "]) is less than SIGRTMIN", signal, i);
-                exit(STATION_APP_ERROR_ARGUMENTS);
-            }
+            ERROR_("real-time signal number SIGRTMIN%+li (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) is greater than SIGRTMAX", signal, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
         }
+    }
+
+    for (unsigned i = 0; i < application.args.SIGRTMAX_given; i++)
+    {
+        long signal = application.args.SIGRTMAX_arg[i];
+
+        if (signal > 0)
+        {
+            ERROR_("real-time signal number can't be greater than SIGRTMAX (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "])", i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+        else if (signal + SIGRTMAX < SIGRTMIN)
+        {
+            ERROR_("real-time signal number SIGRTMAX%+li (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) is less than SIGRTMIN", signal, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+    }
 #endif
 
 #ifdef STATION_IS_OPENCL_SUPPORTED
-        for (unsigned i = 0; i < application.args.cl_context_given; i++)
+    for (unsigned i = 0; i < application.args.cl_context_given; i++)
+    {
+        const char *separator = strchr(application.args.cl_context_arg[i], ':');
+        const char *device_mask = NULL;
+
+        if (separator != NULL)
+            device_mask = separator + 1;
+        else
+            separator = application.args.cl_context_arg[i] +
+                strlen(application.args.cl_context_arg[i]);
+
+        if (separator == application.args.cl_context_arg[i])
         {
-            const char *separator = strchr(application.args.cl_context_arg[i], ':');
-            const char *device_mask = NULL;
+            ERROR_("OpenCL platform index is empty (context argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "])", i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
 
-            if (separator != NULL)
-                device_mask = separator + 1;
-            else
-                separator = application.args.cl_context_arg[i] +
-                    strlen(application.args.cl_context_arg[i]);
+        char *platform_idx_end;
+        strtoul(application.args.cl_context_arg[i], &platform_idx_end, 16);
 
-            if (separator == application.args.cl_context_arg[i])
+        if (platform_idx_end != separator)
+        {
+            ERROR_("OpenCL platform index contains invalid characters: "
+                    COLOR_NUMBER "%.*s" COLOR_RESET " (context argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "])",
+                    (int)(separator - application.args.cl_context_arg[i]),
+                    application.args.cl_context_arg[i], i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+
+        if (device_mask != NULL)
+        {
+            size_t device_mask_len = strlen(device_mask);
+
+            if (device_mask_len == 0)
             {
-                ERROR_("OpenCL platform index is empty (context argument ["
+                ERROR_("OpenCL device mask cannot be empty (context argument ["
                         COLOR_NUMBER "%u" COLOR_RESET "])", i);
                 exit(STATION_APP_ERROR_ARGUMENTS);
             }
-
-            char *platform_idx_end;
-            strtoul(application.args.cl_context_arg[i], &platform_idx_end, 16);
-
-            if (platform_idx_end != separator)
+            else if (strspn(device_mask, "0123456789ABCDEFabcdef") != device_mask_len)
             {
-                ERROR_("OpenCL platform index contains invalid characters: "
-                        COLOR_NUMBER "%.*s" COLOR_RESET " (context argument ["
-                        COLOR_NUMBER "%u" COLOR_RESET "])",
-                        (int)(separator - application.args.cl_context_arg[i]),
-                        application.args.cl_context_arg[i], i);
+                ERROR_("OpenCL device mask contains invalid characters: "
+                        COLOR_NUMBER "%s" COLOR_RESET " (context argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "])", device_mask, i);
                 exit(STATION_APP_ERROR_ARGUMENTS);
             }
-
-            if (device_mask != NULL)
+            else if (strspn(device_mask, "0") == device_mask_len)
             {
-                size_t device_mask_len = strlen(device_mask);
-
-                if (device_mask_len == 0)
-                {
-                    ERROR_("OpenCL device mask cannot be empty (context argument ["
-                            COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                    exit(STATION_APP_ERROR_ARGUMENTS);
-                }
-                else if (strspn(device_mask, "0123456789ABCDEFabcdef") != device_mask_len)
-                {
-                    ERROR_("OpenCL device mask contains invalid characters: "
-                            COLOR_NUMBER "%s" COLOR_RESET " (context argument ["
-                            COLOR_NUMBER "%u" COLOR_RESET "])", device_mask, i);
-                    exit(STATION_APP_ERROR_ARGUMENTS);
-                }
-                else if (strspn(device_mask, "0") == device_mask_len)
-                {
-                    ERROR_("OpenCL device mask cannot be zero (context argument ["
-                            COLOR_NUMBER "%u" COLOR_RESET "])", i);
-                    exit(STATION_APP_ERROR_ARGUMENTS);
-                }
+                ERROR_("OpenCL device mask cannot be zero (context argument ["
+                        COLOR_NUMBER "%u" COLOR_RESET "])", i);
+                exit(STATION_APP_ERROR_ARGUMENTS);
             }
         }
+    }
 #endif
-    }
-
-    ////////////////////////////////////
-    // Display application usage help //
-    ////////////////////////////////////
-
-    if (application.args.help_given)
-    {
-        if (!application.plugin.built_in)
-        {
-            if (application.args.inputs_num == 0)
-            {
-                PRINT("\nstation-app [options...] [PLUGIN_FILE [-- [plugin options...]]]\n\n");
-                args_parser_print_help();
-                exit(EXIT_SUCCESS);
-            }
-        }
-        else
-        {
-            PRINT_("\n%s [app options...] [-- [options...]]\n\n",
-                    application.plugin.vtable->info.name);
-            args_parser_print_help();
-            PRINT("\n");
-        }
-    }
 
     //////////////////////////////////////////////
     // Display list of OpenCL platforms/devices //
     //////////////////////////////////////////////
 
-    if (application.args.cl_list_given)
-    {
 #ifdef STATION_IS_OPENCL_SUPPORTED
+    if (application.args.cl_list_given)
         display_opencl_listing();
 #endif
-        exit(EXIT_SUCCESS);
-    }
 
     ////////////////////////////////////////
     // Exit if no plugin file is provided //
     ////////////////////////////////////////
 
-    if (!application.plugin.built_in && (application.args.inputs_num == 0))
+    if (!application.plugin.built_in && (application.args.plugin_arg == NULL))
         exit(EXIT_SUCCESS);
 
     ///////////////////////////////////////
@@ -797,7 +924,7 @@ static void initialize(int argc, char *argv[])
     if (application.verbose)
     {
         if (!application.plugin.built_in)
-            PRINT_("Plugin file: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.inputs[0]);
+            PRINT_("Plugin file: " COLOR_STRING "%s" COLOR_RESET "\n", application.args.plugin_arg);
         else
             PRINT("Plugin is built-in\n");
 
@@ -822,11 +949,11 @@ static void initialize(int argc, char *argv[])
 #ifdef STATION_IS_DLFCN_SUPPORTED
     if (!application.plugin.built_in)
     {
-        application.plugin.handle = dlopen(application.args.inputs[0], RTLD_NOW | RTLD_LOCAL);
+        application.plugin.handle = dlopen(application.args.plugin_arg, RTLD_NOW | RTLD_LOCAL);
         if (application.plugin.handle == NULL)
         {
             ERROR_("couldn't load plugin " COLOR_STRING "%s" COLOR_RESET
-                    " (%s)", application.args.inputs[0], dlerror());
+                    " (%s)", application.args.plugin_arg, dlerror());
             exit(STATION_APP_ERROR_PLUGIN);
         }
         AT_EXIT(exit_unload_plugin);
@@ -874,7 +1001,7 @@ static void initialize(int argc, char *argv[])
     // Display plugin usage help //
     ///////////////////////////////
 
-    if (application.args.help_given)
+    if (application.args.plugin_help_given)
     {
         if (application.verbose)
         {
@@ -1415,7 +1542,12 @@ static void exit_release_args(void)
 {
     EXIT_ASSERT_MAIN_THREAD();
 
-    args_parser_free(&application.args);
+    free(application.args.file_arg);
+    free(application.args.library_arg);
+    free(application.args.threads_arg);
+    free(application.args.cl_context_arg);
+    free(application.args.SIGRTMIN_arg);
+    free(application.args.SIGRTMAX_arg);
 }
 
 #ifdef STATION_IS_DLFCN_SUPPORTED
@@ -1667,6 +1799,248 @@ static void exit_end_plugin_exec_fn_output(void)
 
 /*****************************************************************************/
 
+static error_t args_parse_1(int key, char *arg, struct argp_state *state)
+{
+    struct application_args *args = state->input;
+
+    switch (key)
+    {
+        case ARGKEY_HELP:
+            argp_state_help(state, state->out_stream, ARGP_HELP_STD_HELP);
+            exit(EXIT_SUCCESS);
+
+        case ARGKEY_USAGE:
+            argp_state_help(state, state->out_stream, ARGP_HELP_USAGE);
+            exit(EXIT_SUCCESS);
+
+        case ARGKEY_VERSION:
+            {
+                uint32_t version_year = STATION_PLUGIN_VERSION / 10000;
+                uint32_t version_month = (STATION_PLUGIN_VERSION / 100) % 100;
+                uint32_t version_day = STATION_PLUGIN_VERSION % 100;
+                printf("%u.%.2u.%.2u\n", version_year, version_month, version_day);
+            }
+            exit(EXIT_SUCCESS);
+
+        case ARGKEY_LOGO:
+            args->logo_given = true;
+            break;
+
+        case ARGKEY_VERBOSE:
+            args->verbose_given = true;
+            break;
+
+        case ARGKEY_CL_LIST:
+            if (args->cl_list_given)
+            {
+                ERROR("OpenCL listing mode cannot be specified multiple times");
+                return EINVAL;
+            }
+
+            args->cl_list_given = true;
+
+            if (!strcmp(arg, "platforms") || !strcmp(arg, "platform") ||
+                    !strcmp(arg, "plt") || !strcmp(arg, "p"))
+                args->cl_list_arg = ARGTYPE_CL_LIST_PLATFORMS;
+            else if (!strcmp(arg, "devices") || !strcmp(arg, "device") ||
+                    !strcmp(arg, "dev") || !strcmp(arg, "d"))
+                args->cl_list_arg = ARGTYPE_CL_LIST_DEVICES;
+            else
+            {
+                ERROR_("unrecognized hardware type specified for OpenCL listing mode: '%s'", arg);
+                return EINVAL;
+            }
+            break;
+
+        case ARGKEY_PLUGIN_HELP:
+            args->plugin_help_given = true;
+            break;
+
+        case ARGKEY_FILE:
+            args->file_given++;
+            break;
+
+        case ARGKEY_LIBRARY:
+            args->library_given++;
+            break;
+
+        case ARGKEY_THREADS:
+            args->threads_given++;
+            break;
+
+        case ARGKEY_CL_CONTEXT:
+            args->cl_context_given++;
+            break;
+
+        case ARGKEY_NO_SDL:
+            args->no_sdl_given = true;
+            break;
+
+#define ACCEPT_SIGNAL(signame) \
+        case ARGKEY_##signame: \
+                               args->signame##_given = true; \
+            break
+
+            ACCEPT_SIGNAL(SIGINT);
+            ACCEPT_SIGNAL(SIGQUIT);
+            ACCEPT_SIGNAL(SIGTERM);
+
+            ACCEPT_SIGNAL(SIGCHLD);
+            ACCEPT_SIGNAL(SIGCONT);
+            ACCEPT_SIGNAL(SIGTSTP);
+            ACCEPT_SIGNAL(SIGXCPU);
+            ACCEPT_SIGNAL(SIGXFSZ);
+
+            ACCEPT_SIGNAL(SIGPIPE);
+            ACCEPT_SIGNAL(SIGPOLL);
+            ACCEPT_SIGNAL(SIGURG);
+
+            ACCEPT_SIGNAL(SIGALRM);
+            ACCEPT_SIGNAL(SIGVTALRM);
+            ACCEPT_SIGNAL(SIGPROF);
+
+            ACCEPT_SIGNAL(SIGHUP);
+            ACCEPT_SIGNAL(SIGTTIN);
+            ACCEPT_SIGNAL(SIGTTOU);
+            ACCEPT_SIGNAL(SIGWINCH);
+
+            ACCEPT_SIGNAL(SIGUSR1);
+            ACCEPT_SIGNAL(SIGUSR2);
+
+#undef ACCEPT_SIGNAL
+
+        case ARGKEY_SIGRTMIN:
+            args->SIGRTMIN_given++;
+            break;
+
+        case ARGKEY_SIGRTMAX:
+            args->SIGRTMAX_given++;
+            break;
+
+        case ARGP_KEY_ARG:
+            if (args->plugin_arg != NULL)
+            {
+                ERROR("cannot process more than one plugin file");
+                return EINVAL;
+            }
+
+            args->plugin_arg = arg;
+            break;
+
+        case ARGP_KEY_ARGS:
+        case ARGP_KEY_NO_ARGS:
+        case ARGP_KEY_END:
+        case ARGP_KEY_INIT:
+        case ARGP_KEY_SUCCESS:
+        case ARGP_KEY_ERROR:
+        case ARGP_KEY_FINI:
+            break;
+
+        default:
+            return ARGP_ERR_UNKNOWN;
+    }
+
+    return 0;
+}
+
+static error_t args_parse_2(int key, char *arg, struct argp_state *state)
+{
+    struct application_args *args = state->input;
+
+    switch (key)
+    {
+        case ARGP_KEY_INIT:
+            args->file_arg = malloc(sizeof(*args->file_arg) * args->file_given);
+            if (args->file_arg == NULL)
+            {
+                ERROR("couldn't allocate array of file paths");
+                return ENOMEM;
+            }
+
+            args->library_arg = malloc(sizeof(*args->library_arg) * args->library_given);
+            if (args->library_arg == NULL)
+            {
+                ERROR("couldn't allocate array of library paths");
+                return ENOMEM;
+            }
+
+            args->threads_arg = malloc(sizeof(*args->threads_arg) * args->threads_given);
+            if (args->threads_arg == NULL)
+            {
+                ERROR("couldn't allocate array of concurrent processing context arguments");
+                return ENOMEM;
+            }
+
+            args->cl_context_arg = malloc(sizeof(*args->cl_context_arg) * args->cl_context_given);
+            if (args->cl_context_arg == NULL)
+            {
+                ERROR("couldn't allocate array of OpenCL context arguments");
+                return ENOMEM;
+            }
+
+            args->SIGRTMIN_arg = malloc(sizeof(*args->SIGRTMIN_arg) * args->SIGRTMIN_given);
+            if (args->SIGRTMIN_arg == NULL)
+            {
+                ERROR("couldn't allocate array of real-time signal numbers SIGRTMIN+i");
+                return ENOMEM;
+            }
+
+            args->SIGRTMAX_arg = malloc(sizeof(*args->SIGRTMAX_arg) * args->SIGRTMAX_given);
+            if (args->SIGRTMAX_arg == NULL)
+            {
+                ERROR("couldn't allocate array of real-time signal numbers SIGRTMAX-i");
+                return ENOMEM;
+            }
+            break;
+
+        case ARGKEY_FILE:
+            args->file_arg[args->file_cur++] = arg;
+            break;
+
+        case ARGKEY_LIBRARY:
+            args->library_arg[args->library_cur++] = arg;
+            break;
+
+        case ARGKEY_THREADS:
+            errno = 0;
+            args->threads_arg[args->threads_cur++] = strtol(arg, (char**)NULL, 10);
+            if (errno != 0)
+            {
+                ERROR_("couldn't parse number of threads from '%s'", arg);
+                return EINVAL;
+            }
+            break;
+
+        case ARGKEY_CL_CONTEXT:
+            args->cl_context_arg[args->cl_context_cur++] = arg;
+            break;
+
+        case ARGKEY_SIGRTMIN:
+            errno = 0;
+            args->SIGRTMIN_arg[args->SIGRTMIN_cur++] = strtol(arg, (char**)NULL, 10);
+            if (errno != 0)
+            {
+                ERROR_("couldn't parse real-time signal number SIGRTMIN+i from '%s'", arg);
+                return EINVAL;
+            }
+            break;
+
+        case ARGKEY_SIGRTMAX:
+            errno = 0;
+            args->SIGRTMAX_arg[args->SIGRTMAX_cur++] = strtol(arg, (char**)NULL, 10);
+            if (errno != 0)
+            {
+                ERROR_("couldn't parse real-time signal number SIGRTMAX-i from '%s'", arg);
+                return EINVAL;
+            }
+            break;
+    }
+
+    return 0;
+}
+
+/*****************************************************************************/
+
 #ifdef STATION_IS_OPENCL_SUPPORTED
 
 static void display_opencl_listing(void)
@@ -1722,7 +2096,7 @@ static void display_opencl_listing(void)
                     COLOR_STRING "%s" COLOR_RESET "\n", platform_idx, name);
         }
 
-        if (application.args.cl_list_arg == cl_list_arg_devices)
+        if (application.args.cl_list_arg == ARGTYPE_CL_LIST_DEVICES)
         {
             cl_uint num_devices;
 

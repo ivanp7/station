@@ -68,63 +68,66 @@ so that the latter becomes a standalone application.
 ## Contents of `station-app --help`
 
 ```
-station-app [options...] [PLUGIN_FILE [-- [plugin options...]]]
+Usage: station-app [OPTION...] PLUGIN_FILE [-- [plugin arguments...]]
 
-Usage:
+ Output options:
+  -@, --logo                 Display application logo
+  -C, --cl-list=TYPE         Display list of OpenCL-compatible hardware
+                             (platforms, devices)
+  -v, --verbose              Display more information
 
-  -A, --argfile=PATH            Parse arguments from file
+ Alternative modes:
+  -H, --plugin-help          Display plugin help
 
-Output options:
-  -v, --verbose                 Display more information
-  -V, --logo                    Display application logo
+ Feature options:
+  -c, --cl-context=PID[:DMASK]   Create OpenCL context
+                             (PID: platform index, DMASK: device mask)
+  -f, --file=PATH            Open binary file for reading
+  -j, --threads=[±]THREADS   Create concurrent processing context
+                             (+: wait on condition variable, -: busy-wait)
+  -l, --library=PATH         Open shared library
+  -n, --no-sdl               Don't initialize SDL subsystems
 
-Alternative mode options:
-  -h, --help                    Display usage help for app or plugin
-  -C, --cl-list=TYPE            Display list of OpenCL-compatible hardware
-                                  (possible values="platforms", "devices")
+ Signal management (interruption events):
+      --SIGINT               Catch <interruption request>
+      --SIGQUIT              Catch <quit request>
+      --SIGTERM              Catch <termination request>
 
-Feature options:
-  -f, --file=PATH               Open binary file for reading
-  -l, --library=PATH            Open shared library
-  -j, --threads=[±]THREADS      Create concurrent processing context
-                                  (+: wait on condition variable, -: busy-wait)
-  -c, --cl-context=PID[:DMASK]  Create OpenCL context
-                                  (PID: platform index, DMASK: device mask)
-  -n, --no-sdl                  Don't initialize SDL subsystems
+ Signal management (process events):
+      --SIGCHLD              Catch <child stopped or terminated>
+      --SIGCONT              Catch <continue if stopped>
+      --SIGTSTP              Catch <stop request>
+      --SIGXCPU              Catch <CPU time limit exceeded>
+      --SIGXFSZ              Catch <file size limit exceeded>
 
-Signal management (interruption events):
-      --SIGINT                  Catch <interruption request>
-      --SIGQUIT                 Catch <quit request>
-      --SIGTERM                 Catch <termination request>
+ Signal management (input/output events):
+      --SIGPIPE              Catch <broken pipe>
+      --SIGPOLL              Catch <pollable event>
+      --SIGURG               Catch <urgent condition on socket>
 
-Signal management (process events):
-      --SIGCHLD                 Catch <child stopped or terminated>
-      --SIGCONT                 Catch <continue if stopped>
-      --SIGTSTP                 Catch <stop request>
-      --SIGXCPU                 Catch <CPU time limit exceeded>
-      --SIGXFSZ                 Catch <file size limit exceeded>
+ Signal management (timer events):
+      --SIGALRM              Catch <timer signal from alarm>
+      --SIGPROF              Catch <profiling timer expired>
+      --SIGVTALRM            Catch <virtual alarm clock>
 
-Signal management (input/output events):
-      --SIGPIPE                 Catch <broken pipe>
-      --SIGPOLL                 Catch <pollable event>
-      --SIGURG                  Catch <urgent condition on socket>
+ Signal management (terminal events):
+      --SIGHUP               Catch <terminal hangup>
+      --SIGTTIN              Catch <terminal input for background process>
+      --SIGTTOU              Catch <terminal output for background process>
+      --SIGWINCH             Catch <terminal resized>
 
-Signal management (timer events):
-      --SIGALRM                 Catch <timer signal from alarm>
-      --SIGVTALRM               Catch <virtual alarm clock>
-      --SIGPROF                 Catch <profiling timer expired>
+ Signal management (user-defined):
+      --SIGRTMAX=-n          Catch <real-time signal MAX-n>
+      --SIGRTMIN=+n          Catch <real-time signal MIN+n>
+      --SIGUSR1              Catch <user-defined signal 1>
+      --SIGUSR2              Catch <user-defined signal 2>
 
-Signal management (terminal events):
-      --SIGHUP                  Catch <terminal hangup>
-      --SIGTTIN                 Catch <terminal input for background process>
-      --SIGTTOU                 Catch <terminal output for background process>
-      --SIGWINCH                Catch <terminal resized>
+  -?, --usage                Display a short usage message
+  -h, --help                 Display this help list
+      --version              Display application version
 
-Signal management (user-defined):
-      --SIGUSR1                 Catch <user-defined signal 1>
-      --SIGUSR2                 Catch <user-defined signal 2>
-      --SIGRTMIN=+n             Catch <real-time signal MIN+n>
-      --SIGRTMAX=-n             Catch <real-time signal MAX-n>
+Mandatory or optional arguments to long options are also mandatory or optional
+for any corresponding short options.
 ```
 
 ## How to build
@@ -142,7 +145,6 @@ and `station-app.pc` (pkg-config file for standalone executable user plugins).
 
 * gcc-compatible compiler (like clang)
 * pkg-config
-* gengetopt
 * ninja
 
 ## Dependencies

@@ -16,11 +16,7 @@ ODIR="build"
 
 FILE_LIBRARY="library"
 FILE_APPLICATION="application"
-FILE_APPLICATION_ENTRY="application.entry"
-
-FILE_APPLICATION_GGO="application.ggo"
-FILE_APPLICATION_ARGS="application.args"
-GGO_FUNC_PREFIX="args_parser"
+FILE_APPLICATION_ENTRY="application_entry"
 
 OUT_LIBRARY_STATIC="lib${PROJECT_NAME}.a"
 OUT_LIBRARY_SHARED="lib${PROJECT_NAME}.so"
@@ -211,11 +207,6 @@ cflags_app = $CFLAGS_APPLICATION
 lflags = $LFLAGS
 
 
-rule gengetopt
-    description = gengetopt < \$in
-    command = gengetopt --file-name="${FILE_APPLICATION_ARGS}" --func-name="${GGO_FUNC_PREFIX}" --output-dir="${ODIR}" \
---set-package="${OUT_APPLICATION}" --set-version="${PROJECT_VERSION}" < \$in
-
 rule cc
     description = cc \$in
     depfile = \$out.d
@@ -258,21 +249,16 @@ fi
 cat <<  _EOF_ >> "${PROJECT_DIR}/${NINJA}"
 
 
-build ${ODIR}/${FILE_APPLICATION_ARGS}.h ${ODIR}/${FILE_APPLICATION_ARGS}.c: gengetopt ${SDIR}/${FILE_APPLICATION_GGO}
-
-build ${ODIR}/${FILE_APPLICATION_ARGS}.o: cc ${ODIR}/${FILE_APPLICATION_ARGS}.c
-    cflags_custom = \$cflags_app
-
-build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c | ${ODIR}/${FILE_APPLICATION_ARGS}.h
+build ${ODIR}/${FILE_APPLICATION}.o: cc ${SDIR}/${FILE_APPLICATION}.c
     cflags_custom = \$cflags_app
 
 build ${ODIR}/${FILE_APPLICATION_ENTRY}.o: cc ${SDIR}/${FILE_APPLICATION_ENTRY}.c
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o
+build ${ODIR}/${OUT_APPLICATION_LIB}: ar ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION}.o
     cflags_custom = \$cflags_app
 
-build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION_ARGS}.o ${ODIR}/${FILE_APPLICATION}.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
+build ${ODIR}/${OUT_APPLICATION}: link ${ODIR}/${FILE_LIBRARY}.o ${ODIR}/${FILE_APPLICATION}.o ${ODIR}/${FILE_APPLICATION_ENTRY}.o
     cflags_custom = \$cflags_app
     lflags_custom = \$lflags_app
 
