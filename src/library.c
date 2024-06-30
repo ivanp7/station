@@ -1227,6 +1227,10 @@ station_signal_management_thread_get_properties(
 {
 #ifndef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     (void) context;
+    (void) std_signals;
+    (void) rt_signals;
+    (void) signal_handler;
+    (void) signal_handler_data;
 #else
     if (context == NULL)
         return;
