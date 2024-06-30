@@ -283,18 +283,29 @@ struct argp_option args_options[] = {
     {.name = "logo", .key = ARGKEY_LOGO, .doc = "Display application logo"},
     {.name = "verbose", .key = ARGKEY_VERBOSE, .doc = "Display more information"},
 
+#ifdef STATION_IS_OPENCL_SUPPORTED
     {.name = "cl-list", .key = ARGKEY_CL_LIST, .arg = "TYPE", .doc = "Display list of OpenCL-compatible hardware (platforms, devices)"},
+#endif
 
     {.doc = "Alternative modes:"},
     {.name = "plugin-help", .key = ARGKEY_PLUGIN_HELP, .doc = "Display plugin help"},
 
     {.doc = "Feature options:"},
     {.name = "file", .key = ARGKEY_FILE, .arg = "PATH", .doc = "Open binary file for reading"},
+#ifdef STATION_IS_DLFCN_SUPPORTED
     {.name = "library", .key = ARGKEY_LIBRARY, .arg = "PATH", .doc = "Open shared library"},
+#endif
+#ifdef STATION_IS_CONCURRENT_PROCESSING_SUPPORTED
     {.name = "threads", .key = ARGKEY_THREADS, .arg = "[±]THREADS", .doc = " Create concurrent processing context\n(+: wait on condition variable, -: busy-wait)"},
+#endif
+#ifdef STATION_IS_OPENCL_SUPPORTED
     {.name = "cl-context", .key = ARGKEY_CL_CONTEXT, .arg = "PID[:DMASK]", .doc = "Create OpenCL context\n(PID: platform index, DMASK: device mask)"},
+#endif
+#ifdef STATION_IS_SDL_SUPPORTED
     {.name = "no-sdl", .key = ARGKEY_NO_SDL, .doc = "Don't initialize SDL subsystems"},
+#endif
 
+#ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
     {.doc = "Signal management (interruption events):"},
     {.name = "SIGINT", .key = ARGKEY_SIGINT, .doc = "Catch <interruption request>"},
     {.name = "SIGQUIT", .key = ARGKEY_SIGQUIT, .doc = "Catch <quit request>"},
@@ -328,6 +339,7 @@ struct argp_option args_options[] = {
     {.name = "SIGUSR2", .key = ARGKEY_SIGUSR2, .doc = "Catch <user-defined signal 2>"},
     {.name = "SIGRTMIN", .key = ARGKEY_SIGRTMIN, .arg = "+n", .doc = "Catch <real-time signal MIN+n>"},
     {.name = "SIGRTMAX", .key = ARGKEY_SIGRTMAX, .arg = "-n", .doc = "Catch <real-time signal MAX-n>"},
+#endif
 
     {0}
 };
