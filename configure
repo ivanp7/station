@@ -64,7 +64,7 @@ do
             BUILD_TYPE="optimized"
             ;;
 
-        D) # feature: enable support for shared libraries
+        L) # feature: enable support for shared libraries
             FEATURE_IS_DLFCN_SUPPORTED="true"
             ;;
 
@@ -76,7 +76,11 @@ do
             FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED="true"
             ;;
 
-        M) # feature: enable support for Simple DirectMedia Layer (SDL)
+        M) # feature: enable support for shared memory
+            FEATURE_IS_SHARED_MEMORY_SUPPORTED="true"
+            ;;
+
+        D) # feature: enable support for Simple DirectMedia Layer (SDL)
             FEATURE_IS_SDL_SUPPORTED="true"
             ;;
 
@@ -141,6 +145,7 @@ CFLAGS_COMMON="$CFLAGS_DLFCN $CFLAGS_SDL $CFLAGS_OPENCL \
 ${FEATURE_IS_DLFCN_SUPPORTED:+"-DSTATION_IS_DLFCN_SUPPORTED"} \
 ${FEATURE_IS_CONCURRENT_PROCESSING_SUPPORTED:+"-pthread -DSTATION_IS_CONCURRENT_PROCESSING_SUPPORTED"} \
 ${FEATURE_IS_SIGNAL_MANAGEMENT_SUPPORTED:+"-DSTATION_IS_SIGNAL_MANAGEMENT_SUPPORTED"} \
+${FEATURE_IS_SHARED_MEMORY_SUPPORTED:+"-DSTATION_IS_SHARED_MEMORY_SUPPORTED"} \
 ${FEATURE_IS_SDL_SUPPORTED:+"-DSTATION_IS_SDL_SUPPORTED"} \
 ${FEATURE_IS_OPENCL_SUPPORTED:+"-DSTATION_IS_OPENCL_SUPPORTED"}"
 LFLAGS_COMMON="$LFLAGS_DLFCN $LFLAGS_SDL $LFLAGS_OPENCL"

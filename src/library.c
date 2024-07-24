@@ -46,6 +46,10 @@
 #  include <time.h>
 #endif
 
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+#  include <sys/shm.h>
+#endif
+
 #ifdef STATION_IS_SDL_SUPPORTED
 #  include <SDL.h>
 #  include <SDL_video.h>
@@ -61,6 +65,8 @@
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
 #include <station/signal.def.h>
+
+#include <station/shared_memory.fun.h>
 
 #include <station/sdl.fun.h>
 #include <station/sdl.typ.h>
@@ -1246,6 +1252,47 @@ station_signal_management_thread_get_properties(
 
     if (signal_handler_data != NULL)
         *signal_handler_data = context->handler_data;
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// shared_memory.fun.h
+///////////////////////////////////////////////////////////////////////////////
+
+void*
+station_shared_memory_attach_with_ptr_support(
+        int shmid,
+        int shmflg)
+{
+#ifndef STATION_IS_SHARED_MEMORY_SUPPORTED
+    (void) shmid;
+    (void) shmflg;
+
+    return NULL;
+#else
+    void *current_shmaddr = shmat(shmid, NULL, shmflg);
+    if (current_shmaddr == (void*)-1)
+        return NULL;
+
+    void *shmaddr = *(void**)current_shmaddr;
+
+    if (shmaddr != current_shmaddr)
+    {
+        if (shmdt(current_shmaddr) == -1)
+            return NULL;
+
+        current_shmaddr = shmat(shmid, shmaddr, SHM_RND | shmflg);
+        if (current_shmaddr == (void*)-1)
+            return NULL;
+
+        if (current_shmaddr != shmaddr)
+        {
+            shmdt(current_shmaddr);
+            return NULL;
+        }
+    }
+
+    return shmaddr;
 #endif
 }
 
