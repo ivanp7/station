@@ -415,11 +415,6 @@ static STATION_PLUGIN_CONF_FUNC(plugin_conf) // implicit arguments: args, argc, 
         args->cmdline = argv[1]; // first argument will be draw as a floating text
 
     // Catch the following signals
-    args->std_signals_used->signal_SIGINT = true;
-    args->std_signals_used->signal_SIGQUIT = true;
-    args->std_signals_used->signal_SIGTERM = true;
-    for (int i = 0; i <= SIGRTMAX-SIGRTMIN; i++)
-        args->rt_signals_used->signal_SIGRTMIN[i] = true;
     args->signal_handler = signal_handler;
 
     args->num_files_used = 1;
