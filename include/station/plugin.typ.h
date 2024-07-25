@@ -49,6 +49,9 @@ typedef struct station_plugin_conf_func_args {
     void *signal_handler_data; ///< Signal handler data.
 
     size_t num_files_used; ///< Number of files that are used and maximum number to be read.
+    size_t num_sharedmem_simple_used; ///< Number of simple shared memory segments to be attached.
+    size_t num_sharedmem_ptrs_used; ///< Number of shared memory segments with pointer support to be attached.
+
     size_t num_libraries_used; ///< Number of shared libraries that are used and maximum number to be loaded.
 
     size_t num_concurrent_processing_contexts_used; ///< Number of concurrent processing contexts that are used and maximum number to be initialized.
@@ -70,6 +73,12 @@ typedef struct station_plugin_init_func_inputs {
 
     size_t num_files; ///< Number of file streams.
     FILE **files;     ///< File streams.
+
+    size_t num_sharedmem_simple; ///< Number of simple shared memory segments.
+    void **sharedmem_simple; ///< Pointers to simple shared memory segments.
+
+    size_t num_sharedmem_ptrs; ///< Number of shared memory segments with pointer support.
+    void **sharedmem_ptrs; ///< Pointers to shared memory segments with pointer support.
 
     size_t num_libraries; ///< Number of shared libraries handles.
     void **libraries;     ///< Shared libraries handles.

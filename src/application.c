@@ -47,6 +47,11 @@
 #  include <signal.h>
 #endif
 
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+#  include <sys/shm.h>
+#  include <sys/ipc.h>
+#endif
+
 #ifdef STATION_IS_OPENCL_SUPPORTED
 #  include <CL/cl.h>
 #endif
@@ -63,6 +68,8 @@
 
 #include <station/signal.fun.h>
 #include <station/signal.typ.h>
+
+#include <station/shared_memory.fun.h>
 
 #include <station/concurrent.fun.h>
 
@@ -236,6 +243,8 @@ enum args_keys {
     ARGKEY_PLUGIN_HELP = 'H',
 
     ARGKEY_FILE = 'f',
+    ARGKEY_SHM_SIMPLE = 's',
+    ARGKEY_SHM_PTRS = 'p',
     ARGKEY_LIBRARY = 'l',
     ARGKEY_THREADS = 'j',
     ARGKEY_CL_CONTEXT = 'c',
@@ -292,6 +301,10 @@ struct argp_option args_options[] = {
 
     {.doc = "Feature options:"},
     {.name = "file", .key = ARGKEY_FILE, .arg = "PATH", .doc = "Open binary file for reading"},
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+    {.name = "shm", .key = ARGKEY_SHM_SIMPLE, .arg = "IDHEX@PATH", .doc = "Attach simple shared memory for reading"},
+    {.name = "shm-ptr", .key = ARGKEY_SHM_PTRS, .arg = "IDHEX@PATH", .doc = "Attach shared memory with pointers for reading"},
+#endif
 #ifdef STATION_IS_DLFCN_SUPPORTED
     {.name = "library", .key = ARGKEY_LIBRARY, .arg = "PATH", .doc = "Open shared library"},
 #endif
@@ -365,6 +378,14 @@ struct application_args
     unsigned file_cur;
     char **file_arg;
 
+    unsigned shm_simple_given;
+    unsigned shm_simple_cur;
+    char **shm_simple_arg;
+
+    unsigned shm_ptrs_given;
+    unsigned shm_ptrs_cur;
+    char **shm_ptrs_arg;
+
     unsigned library_given;
     unsigned library_cur;
     char **library_arg;
@@ -435,6 +456,11 @@ static struct {
 
     struct {
         size_t count;
+        void **ptrs;
+    } shm_simple, shm_ptrs;
+
+    struct {
+        size_t count;
         void **handles;
     } library;
 
@@ -499,6 +525,11 @@ static void exit_quit_sdl(void);
 
 #ifdef STATION_IS_DLFCN_SUPPORTED
 static void exit_close_libraries(void);
+#endif
+
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+static void exit_detach_shared_memory_simple(void);
+static void exit_detach_shared_memory_ptrs(void);
 #endif
 
 static void exit_close_files(void);
@@ -772,6 +803,14 @@ static void initialize(int argc, char *argv[])
         PRINT(COLOR_RESET "] Shared libraries\n");
 
         PRINT("[");
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+        PRINT(COLOR_FLAG_ON "  supported  ");
+#else
+        PRINT(COLOR_FLAG_OFF "not supported");
+#endif
+        PRINT(COLOR_RESET "] Shared memory\n");
+
+        PRINT("[");
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
         PRINT(COLOR_FLAG_ON "  supported  ");
 #else
@@ -849,6 +888,60 @@ static void initialize(int argc, char *argv[])
         {
             ERROR_("real-time signal number SIGRTMAX%+li (argument ["
                     COLOR_NUMBER "%u" COLOR_RESET "]) is less than SIGRTMIN", signal, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+    }
+#endif
+
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+    for (unsigned i = 0; i < application.args.shm_simple_given; i++)
+    {
+        const char *arg = application.args.shm_simple_arg[i];
+
+        if (strlen(arg) < 4)
+        {
+            ERROR_("simple shared memory specifier '%s' (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) is too short", arg, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+
+        if (arg[2] != '@')
+        {
+            ERROR_("simple shared memory specifier '%s' (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) has incorrect format", arg, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+
+        if (strspn(arg, "0123456789ABCDEFabcdef") != 2)
+        {
+            ERROR_("simple shared memory specifier '%s' (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) has incorrect project ID hex", arg, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+    }
+
+    for (unsigned i = 0; i < application.args.shm_ptrs_given; i++)
+    {
+        const char *arg = application.args.shm_ptrs_arg[i];
+
+        if (strlen(arg) < 4)
+        {
+            ERROR_("shared memory (with pointer support) specifier '%s' (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) is too short", arg, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+
+        if (arg[2] != '@')
+        {
+            ERROR_("shared memory (with pointer support) specifier '%s' (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) has incorrect format", arg, i);
+            exit(STATION_APP_ERROR_ARGUMENTS);
+        }
+
+        if (strspn(arg, "0123456789ABCDEFabcdef") != 2)
+        {
+            ERROR_("shared memory (with pointer support) specifier '%s' (argument ["
+                    COLOR_NUMBER "%u" COLOR_RESET "]) has incorrect project ID hex", arg, i);
             exit(STATION_APP_ERROR_ARGUMENTS);
         }
     }
@@ -1135,6 +1228,14 @@ static void initialize(int argc, char *argv[])
     if (application.file.count > application.args.file_given)
         application.file.count = application.args.file_given;
 
+    application.shm_simple.count = application.plugin.configuration.num_sharedmem_simple_used;
+    if (application.shm_simple.count > application.args.shm_simple_given)
+        application.shm_simple.count = application.args.shm_simple_given;
+
+    application.shm_ptrs.count = application.plugin.configuration.num_sharedmem_ptrs_used;
+    if (application.shm_ptrs.count > application.args.shm_ptrs_given)
+        application.shm_ptrs.count = application.args.shm_ptrs_given;
+
     application.library.count = application.plugin.configuration.num_libraries_used;
     if (application.library.count > application.args.library_given)
         application.library.count = application.args.library_given;
@@ -1145,12 +1246,13 @@ static void initialize(int argc, char *argv[])
 
     if (application.verbose)
     {
-        PRINT("\n");
+        bool anything = false;
 
 #ifdef STATION_IS_SIGNAL_MANAGEMENT_SUPPORTED
         if (application.signal.management_used)
         {
-            PRINT("Standard signals:");
+            anything = true;
+            PRINT("\nStandard signals:");
 
 #  define PRINT_SIGNAL(signame) do {                            \
             if (application.signal.std_set.signal_##signame)    \
@@ -1184,9 +1286,7 @@ static void initialize(int argc, char *argv[])
 
 #  undef PRINT_SIGNAL
 
-            PRINT("\n");
-
-            PRINT("Real-time signals:");
+            PRINT("\nReal-time signals:");
 
             int printed = 0;
             for (int i = 0; i <= SIGRTMAX-SIGRTMIN; i++)
@@ -1211,7 +1311,8 @@ static void initialize(int argc, char *argv[])
 
         if ((application.concurrent_processing.contexts.num_contexts > 0) || (application.args.threads_given > 0))
         {
-            PRINT_("Concurrent processing contexts: " COLOR_NUMBER "%lu" COLOR_RESET,
+            anything = true;
+            PRINT_("\nConcurrent processing contexts: " COLOR_NUMBER "%lu" COLOR_RESET,
                     (unsigned long)application.concurrent_processing.contexts.num_contexts);
 
             if (application.args.threads_given > application.concurrent_processing.contexts.num_contexts)
@@ -1241,7 +1342,8 @@ static void initialize(int argc, char *argv[])
 #ifdef STATION_IS_OPENCL_SUPPORTED
         if ((application.opencl.contexts.num_contexts > 0) || (application.args.cl_context_given > 0))
         {
-            PRINT_("OpenCL contexts: " COLOR_NUMBER "%lu" COLOR_RESET,
+            anything = true;
+            PRINT_("\nOpenCL contexts: " COLOR_NUMBER "%lu" COLOR_RESET,
                     (unsigned long)application.opencl.contexts.num_contexts);
 
             if (application.args.cl_context_given > application.opencl.contexts.num_contexts)
@@ -1275,7 +1377,8 @@ static void initialize(int argc, char *argv[])
 #ifdef STATION_IS_SDL_SUPPORTED
         if (application.plugin.configuration.sdl_is_used)
         {
-            PRINT("SDL subsystems:");
+            anything = true;
+            PRINT("\nSDL subsystems:");
 
             if ((application.plugin.configuration.sdl_init_flags &
                         SDL_INIT_EVERYTHING) == SDL_INIT_EVERYTHING)
@@ -1304,7 +1407,8 @@ static void initialize(int argc, char *argv[])
 
         if ((application.file.count > 0) || (application.args.file_given > 0))
         {
-            PRINT_("Files: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.file.count);
+            anything = true;
+            PRINT_("\nFiles: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.file.count);
 
             if (application.args.file_given > application.file.count)
                 PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
@@ -1317,12 +1421,45 @@ static void initialize(int argc, char *argv[])
                         COLOR_STRING "%s" COLOR_RESET "\n", (unsigned long)i, application.args.file_arg[i]);
         }
 
-        PRINT("\n");
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+        if ((application.shm_simple.count > 0) || (application.args.shm_simple_given > 0))
+        {
+            anything = true;
+            PRINT_("\nShared memory (simple): " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.shm_simple.count);
+
+            if (application.args.shm_simple_given > application.shm_simple.count)
+                PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                        (unsigned long)(application.args.shm_simple_given - application.shm_simple.count));
+
+            PRINT("\n");
+
+            for (size_t i = 0; i < application.shm_simple.count; i++)
+                PRINT_("  [" COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n", (unsigned long)i, application.args.shm_simple_arg[i]);
+        }
+
+        if ((application.shm_ptrs.count > 0) || (application.args.shm_ptrs_given > 0))
+        {
+            anything = true;
+            PRINT_("\nShared memory (with pointer support): " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.shm_ptrs.count);
+
+            if (application.args.shm_ptrs_given > application.shm_ptrs.count)
+                PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
+                        (unsigned long)(application.args.shm_ptrs_given - application.shm_ptrs.count));
+
+            PRINT("\n");
+
+            for (size_t i = 0; i < application.shm_ptrs.count; i++)
+                PRINT_("  [" COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n", (unsigned long)i, application.args.shm_ptrs_arg[i]);
+        }
+#endif
 
 #ifdef STATION_IS_DLFCN_SUPPORTED
         if ((application.library.count > 0) || (application.args.library_given > 0))
         {
-            PRINT_("Libraries: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.library.count);
+            anything = true;
+            PRINT_("\nLibraries: " COLOR_NUMBER "%lu" COLOR_RESET, (unsigned long)application.library.count);
 
             if (application.args.library_given > application.library.count)
                 PRINT_(" (extra " COLOR_NUMBER "%lu" COLOR_RESET " ignored)",
@@ -1335,6 +1472,9 @@ static void initialize(int argc, char *argv[])
                         COLOR_STRING "%s" COLOR_RESET "\n", (unsigned long)i, application.args.library_arg[i]);
         }
 #endif
+
+        if (anything)
+            PRINT("\n");
     }
 
     ///////////////////////////////
@@ -1370,6 +1510,156 @@ static void initialize(int argc, char *argv[])
             }
         }
     }
+
+    ///////////////////////////
+    // Attach shared memory ///
+    ///////////////////////////
+
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+    if (application.shm_simple.count > 0)
+    {
+        application.shm_simple.ptrs = malloc(
+                sizeof(*application.shm_simple.ptrs) * application.shm_simple.count);
+        if (application.shm_simple.ptrs == NULL)
+        {
+            ERROR("couldn't allocate array of pointers to simple shared memory");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (size_t i = 0; i < application.shm_simple.count; i++)
+            application.shm_simple.ptrs[i] = NULL;
+
+        AT_EXIT(exit_detach_shared_memory_simple);
+
+        for (size_t i = 0; i < application.shm_simple.count; i++)
+        {
+            const char *arg = application.args.shm_simple_arg[i];
+
+            int proj_id = 0;
+            {
+                if ((arg[0] >= '0') && (arg[0] <= '9'))
+                    proj_id += arg[0] - '0';
+                else if ((arg[0] >= 'A') && (arg[0] <= 'F'))
+                    proj_id += arg[0] - 'A' + 10;
+                else if ((arg[0] >= 'a') && (arg[0] <= 'f'))
+                    proj_id += arg[0] - 'a' + 10;
+
+                proj_id <<= 4;
+
+                if ((arg[1] >= '0') && (arg[1] <= '9'))
+                    proj_id += arg[1] - '0';
+                else if ((arg[1] >= 'A') && (arg[1] <= 'F'))
+                    proj_id += arg[1] - 'A' + 10;
+                else if ((arg[1] >= 'a') && (arg[1] <= 'f'))
+                    proj_id += arg[1] - 'a' + 10;
+            }
+
+            key_t key = ftok(arg + 3, proj_id);
+            if (key == -1)
+            {
+                ERROR_("couldn't generate key for simple shared memory segment ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, arg);
+                exit(STATION_APP_ERROR_SHAREDMEM);
+            }
+
+            int shmid = shmget(key, 0, 0);
+            if (shmid == -1)
+            {
+                ERROR_("couldn't get simple shared memory segment ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, arg);
+                exit(STATION_APP_ERROR_SHAREDMEM);
+            }
+
+            void *shmaddr = shmat(shmid, NULL, SHM_RDONLY);
+            if (shmaddr == (void*)-1)
+            {
+                ERROR_("couldn't attach simple shared memory segment ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, arg);
+                exit(STATION_APP_ERROR_SHAREDMEM);
+            }
+
+            application.shm_simple.ptrs[i] = shmaddr;
+        }
+    }
+
+    if (application.shm_ptrs.count > 0)
+    {
+        application.shm_ptrs.ptrs = malloc(
+                sizeof(*application.shm_ptrs.ptrs) * application.shm_ptrs.count);
+        if (application.shm_ptrs.ptrs == NULL)
+        {
+            ERROR("couldn't allocate array of pointers to shared memory with pointer support");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (size_t i = 0; i < application.shm_ptrs.count; i++)
+            application.shm_ptrs.ptrs[i] = NULL;
+
+        AT_EXIT(exit_detach_shared_memory_ptrs);
+
+        for (size_t i = 0; i < application.shm_ptrs.count; i++)
+        {
+            const char *arg = application.args.shm_ptrs_arg[i];
+
+            int proj_id = 0;
+            {
+                if ((arg[0] >= '0') && (arg[0] <= '9'))
+                    proj_id += arg[0] - '0';
+                else if ((arg[0] >= 'A') && (arg[0] <= 'F'))
+                    proj_id += arg[0] - 'A' + 10;
+                else if ((arg[0] >= 'a') && (arg[0] <= 'f'))
+                    proj_id += arg[0] - 'a' + 10;
+
+                proj_id <<= 4;
+
+                if ((arg[1] >= '0') && (arg[1] <= '9'))
+                    proj_id += arg[1] - '0';
+                else if ((arg[1] >= 'A') && (arg[1] <= 'F'))
+                    proj_id += arg[1] - 'A' + 10;
+                else if ((arg[1] >= 'a') && (arg[1] <= 'f'))
+                    proj_id += arg[1] - 'a' + 10;
+            }
+
+            key_t key = ftok(arg + 3, proj_id);
+            if (key == -1)
+            {
+                ERROR_("couldn't generate key for shared memory segment with pointer support ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, arg);
+                exit(STATION_APP_ERROR_SHAREDMEM);
+            }
+
+            int shmid = shmget(key, 0, 0);
+            if (shmid == -1)
+            {
+                ERROR_("couldn't get shared memory segment with pointer support ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, arg);
+                exit(STATION_APP_ERROR_SHAREDMEM);
+            }
+
+            void *shmaddr = station_shared_memory_attach_with_ptr_support(shmid, SHM_RDONLY);
+            if (shmaddr == NULL)
+            {
+                ERROR_("couldn't attach shared memory segment with pointer support ["
+                        COLOR_NUMBER "%lu" COLOR_RESET "]: "
+                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        (unsigned long)i, arg);
+                exit(STATION_APP_ERROR_SHAREDMEM);
+            }
+
+            application.shm_ptrs.ptrs[i] = shmaddr;
+        }
+    }
+#endif
 
     ////////////////////////////
     // Load shared libraries ///
@@ -1555,6 +1845,8 @@ static void exit_release_args(void)
     EXIT_ASSERT_MAIN_THREAD();
 
     free(application.args.file_arg);
+    free(application.args.shm_simple_arg);
+    free(application.args.shm_ptrs_arg);
     free(application.args.library_arg);
     free(application.args.threads_arg);
     free(application.args.cl_context_arg);
@@ -1611,6 +1903,32 @@ static void exit_close_libraries(void)
                 dlclose(application.library.handles[i]);
 
     free(application.library.handles);
+}
+#endif
+
+#ifdef STATION_IS_SHARED_MEMORY_SUPPORTED
+static void exit_detach_shared_memory_simple(void)
+{
+    EXIT_ASSERT_MAIN_THREAD();
+
+    if (application.shm_simple.ptrs != NULL)
+        for (size_t i = 0; i < application.shm_simple.count; i++)
+            if (application.shm_simple.ptrs[i] != NULL)
+                shmdt(application.shm_simple.ptrs[i]);
+
+    free(application.shm_simple.ptrs);
+}
+
+static void exit_detach_shared_memory_ptrs(void)
+{
+    EXIT_ASSERT_MAIN_THREAD();
+
+    if (application.shm_ptrs.ptrs != NULL)
+        for (size_t i = 0; i < application.shm_ptrs.count; i++)
+            if (application.shm_ptrs.ptrs[i] != NULL)
+                shmdt(application.shm_ptrs.ptrs[i]);
+
+    free(application.shm_ptrs.ptrs);
 }
 #endif
 
@@ -1674,6 +1992,10 @@ static int run(void)
             .signal_handler_data = application.plugin.configuration.signal_handler_data,
             .num_files = application.file.count,
             .files = application.file.streams,
+            .num_sharedmem_simple = application.shm_simple.count,
+            .sharedmem_simple = application.shm_simple.ptrs,
+            .num_sharedmem_ptrs = application.shm_ptrs.count,
+            .sharedmem_ptrs = application.shm_ptrs.ptrs,
             .num_libraries = application.library.count,
             .libraries = application.library.handles,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,
@@ -1872,6 +2194,14 @@ static error_t args_parse_1(int key, char *arg, struct argp_state *state)
             args->file_given++;
             break;
 
+        case ARGKEY_SHM_SIMPLE:
+            args->shm_simple_given++;
+            break;
+
+        case ARGKEY_SHM_PTRS:
+            args->shm_ptrs_given++;
+            break;
+
         case ARGKEY_LIBRARY:
             args->library_given++;
             break;
@@ -1962,51 +2292,97 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
     switch (key)
     {
         case ARGP_KEY_INIT:
-            args->file_arg = malloc(sizeof(*args->file_arg) * args->file_given);
-            if (args->file_arg == NULL)
+            if (args->file_given > 0)
             {
-                ERROR("couldn't allocate array of file paths");
-                return ENOMEM;
+                args->file_arg = malloc(sizeof(*args->file_arg) * args->file_given);
+                if (args->file_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of file paths");
+                    return ENOMEM;
+                }
             }
 
-            args->library_arg = malloc(sizeof(*args->library_arg) * args->library_given);
-            if (args->library_arg == NULL)
+            if (args->shm_simple_given > 0)
             {
-                ERROR("couldn't allocate array of library paths");
-                return ENOMEM;
+                args->shm_simple_arg = malloc(sizeof(*args->shm_simple_arg) * args->shm_simple_given);
+                if (args->shm_simple_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of simple shared memory paths");
+                    return ENOMEM;
+                }
             }
 
-            args->threads_arg = malloc(sizeof(*args->threads_arg) * args->threads_given);
-            if (args->threads_arg == NULL)
+            if (args->shm_ptrs_given > 0)
             {
-                ERROR("couldn't allocate array of concurrent processing context arguments");
-                return ENOMEM;
+                args->shm_ptrs_arg = malloc(sizeof(*args->shm_ptrs_arg) * args->shm_ptrs_given);
+                if (args->shm_ptrs_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of paths of shared memory with pointer support");
+                    return ENOMEM;
+                }
             }
 
-            args->cl_context_arg = malloc(sizeof(*args->cl_context_arg) * args->cl_context_given);
-            if (args->cl_context_arg == NULL)
+            if (args->library_given > 0)
             {
-                ERROR("couldn't allocate array of OpenCL context arguments");
-                return ENOMEM;
+                args->library_arg = malloc(sizeof(*args->library_arg) * args->library_given);
+                if (args->library_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of library paths");
+                    return ENOMEM;
+                }
             }
 
-            args->SIGRTMIN_arg = malloc(sizeof(*args->SIGRTMIN_arg) * args->SIGRTMIN_given);
-            if (args->SIGRTMIN_arg == NULL)
+            if (args->threads_given > 0)
             {
-                ERROR("couldn't allocate array of real-time signal numbers SIGRTMIN+i");
-                return ENOMEM;
+                args->threads_arg = malloc(sizeof(*args->threads_arg) * args->threads_given);
+                if (args->threads_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of concurrent processing context arguments");
+                    return ENOMEM;
+                }
             }
 
-            args->SIGRTMAX_arg = malloc(sizeof(*args->SIGRTMAX_arg) * args->SIGRTMAX_given);
-            if (args->SIGRTMAX_arg == NULL)
+            if (args->cl_context_given > 0)
             {
-                ERROR("couldn't allocate array of real-time signal numbers SIGRTMAX-i");
-                return ENOMEM;
+                args->cl_context_arg = malloc(sizeof(*args->cl_context_arg) * args->cl_context_given);
+                if (args->cl_context_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of OpenCL context arguments");
+                    return ENOMEM;
+                }
+            }
+
+            if (args->SIGRTMIN_given > 0)
+            {
+                args->SIGRTMIN_arg = malloc(sizeof(*args->SIGRTMIN_arg) * args->SIGRTMIN_given);
+                if (args->SIGRTMIN_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of real-time signal numbers SIGRTMIN+i");
+                    return ENOMEM;
+                }
+            }
+
+            if (args->SIGRTMAX_given > 0)
+            {
+                args->SIGRTMAX_arg = malloc(sizeof(*args->SIGRTMAX_arg) * args->SIGRTMAX_given);
+                if (args->SIGRTMAX_arg == NULL)
+                {
+                    ERROR("couldn't allocate array of real-time signal numbers SIGRTMAX-i");
+                    return ENOMEM;
+                }
             }
             break;
 
         case ARGKEY_FILE:
             args->file_arg[args->file_cur++] = arg;
+            break;
+
+        case ARGKEY_SHM_SIMPLE:
+            args->shm_simple_arg[args->shm_simple_cur++] = arg;
+            break;
+
+        case ARGKEY_SHM_PTRS:
+            args->shm_ptrs_arg[args->shm_ptrs_cur++] = arg;
             break;
 
         case ARGKEY_LIBRARY:
