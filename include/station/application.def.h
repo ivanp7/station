@@ -44,6 +44,11 @@
 #define STATION_APP_ERROR_SDL           (STATION_APP_ERROR_BASE + 11) ///< Error: couldn't initialize SDL subsystems.
 
 /**
+ * @brief Maximum value of application error exit code.
+ */
+#define STATION_APP_ERROR_MAX STATION_APP_ERROR_SDL
+
+/**
  * @brief Define standalone plugin entry point.
  */
 #define STATION_APP_PLUGIN_MAIN()                   \
