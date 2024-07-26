@@ -87,6 +87,8 @@ Usage: station-app [OPTION...] PLUGIN_FILE [-- [plugin arguments...]]
                              (+: wait on condition variable, -: busy-wait)
   -l, --library=PATH         Open shared library
   -n, --no-sdl               Don't initialize SDL subsystems
+  -p, --shm-ptr=IDHEX@PATH   Attach shared memory with pointers for reading
+  -s, --shm=IDHEX@PATH       Attach simple shared memory for reading
 
  Signal management (interruption events):
       --SIGINT               Catch <interruption request>
