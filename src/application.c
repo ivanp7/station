@@ -457,6 +457,7 @@ static struct {
     struct {
         size_t count;
         void **ptrs;
+        void **ptrs_data;
     } shm_simple, shm_ptrs;
 
     struct {
@@ -1522,7 +1523,7 @@ static void initialize(int argc, char *argv[])
                 sizeof(*application.shm_simple.ptrs) * application.shm_simple.count);
         if (application.shm_simple.ptrs == NULL)
         {
-            ERROR("couldn't allocate array of pointers to simple shared memory");
+            ERROR("couldn't allocate array of pointers for simple shared memory");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1530,6 +1531,8 @@ static void initialize(int argc, char *argv[])
             application.shm_simple.ptrs[i] = NULL;
 
         AT_EXIT(exit_detach_shared_memory_simple);
+
+        application.shm_simple.ptrs_data = application.shm_simple.ptrs;
 
         for (size_t i = 0; i < application.shm_simple.count; i++)
         {
@@ -1594,7 +1597,7 @@ static void initialize(int argc, char *argv[])
                 sizeof(*application.shm_ptrs.ptrs) * application.shm_ptrs.count);
         if (application.shm_ptrs.ptrs == NULL)
         {
-            ERROR("couldn't allocate array of pointers to shared memory with pointer support");
+            ERROR("couldn't allocate array of pointers for shared memory with pointer support");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1602,6 +1605,17 @@ static void initialize(int argc, char *argv[])
             application.shm_ptrs.ptrs[i] = NULL;
 
         AT_EXIT(exit_detach_shared_memory_ptrs);
+
+        application.shm_ptrs.ptrs_data = malloc(
+                sizeof(*application.shm_ptrs.ptrs_data) * application.shm_ptrs.count);
+        if (application.shm_ptrs.ptrs_data == NULL)
+        {
+            ERROR("couldn't allocate array of pointers for shared memory with pointer support");
+            exit(STATION_APP_ERROR_MALLOC);
+        }
+
+        for (size_t i = 0; i < application.shm_ptrs.count; i++)
+            application.shm_ptrs.ptrs_data[i] = NULL;
 
         for (size_t i = 0; i < application.shm_ptrs.count; i++)
         {
@@ -1646,7 +1660,7 @@ static void initialize(int argc, char *argv[])
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
-            void *shmaddr = station_shared_memory_attach_with_ptr_support(shmid, SHM_RDONLY);
+            void *shmaddr = station_shared_memory_with_ptr_support_attach(shmid, SHM_RDONLY);
             if (shmaddr == NULL)
             {
                 ERROR_("couldn't attach shared memory segment with pointer support ["
@@ -1657,6 +1671,7 @@ static void initialize(int argc, char *argv[])
             }
 
             application.shm_ptrs.ptrs[i] = shmaddr;
+            application.shm_ptrs.ptrs_data[i] = station_shared_memory_with_ptr_support_get_data(shmaddr);
         }
     }
 #endif
@@ -1917,6 +1932,7 @@ static void exit_detach_shared_memory_simple(void)
                 shmdt(application.shm_simple.ptrs[i]);
 
     free(application.shm_simple.ptrs);
+    // no need to free(application.shm_simple.ptrs_data), it is a copy of .ptrs
 }
 
 static void exit_detach_shared_memory_ptrs(void)
@@ -1929,6 +1945,7 @@ static void exit_detach_shared_memory_ptrs(void)
                 shmdt(application.shm_ptrs.ptrs[i]);
 
     free(application.shm_ptrs.ptrs);
+    free(application.shm_ptrs.ptrs_data);
 }
 #endif
 
@@ -1993,9 +2010,9 @@ static int run(void)
             .num_files = application.file.count,
             .files = application.file.streams,
             .num_sharedmem_simple = application.shm_simple.count,
-            .sharedmem_simple = application.shm_simple.ptrs,
+            .sharedmem_simple = application.shm_simple.ptrs_data,
             .num_sharedmem_ptrs = application.shm_ptrs.count,
-            .sharedmem_ptrs = application.shm_ptrs.ptrs,
+            .sharedmem_ptrs = application.shm_ptrs.ptrs_data,
             .num_libraries = application.library.count,
             .libraries = application.library.handles,
             .concurrent_processing_contexts = &application.concurrent_processing.contexts,

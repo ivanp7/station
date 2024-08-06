@@ -1260,7 +1260,7 @@ station_signal_management_thread_get_properties(
 ///////////////////////////////////////////////////////////////////////////////
 
 void*
-station_shared_memory_attach_with_ptr_support(
+station_shared_memory_with_ptr_support_attach(
         int shmid,
         int shmflg)
 {
@@ -1294,6 +1294,13 @@ station_shared_memory_attach_with_ptr_support(
 
     return shmaddr;
 #endif
+}
+
+void*
+station_shared_memory_with_ptr_support_get_data(
+        void *shmaddr)
+{
+    return (void**)shmaddr + 1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -38,9 +38,19 @@
  * @return Pointer to shared memory or NULL in case of error.
  */
 void*
-station_shared_memory_attach_with_ptr_support(
+station_shared_memory_with_ptr_support_attach(
         int shmid, ///< [in] Shared memory segment identifier.
         int shmflg ///< [in] Attached memory flags.
+);
+
+/**
+ * @brief Get pointer to data of shared memory segment with pointer support.
+ *
+ * @return Pointer to shared memory data.
+ */
+void*
+station_shared_memory_with_ptr_support_get_data(
+        void *shmaddr ///< [in] Shared memory pointer.
 );
 
 #endif // _STATION_SHARED_MEMORY_FUN_H_
