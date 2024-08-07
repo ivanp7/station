@@ -631,6 +631,7 @@ static void initialize_static_data(void)
     if (application.signal.rt_set.signal_SIGRTMIN == NULL)
     {
         ERROR("couldn't allocate array of real-time signal flags");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -739,6 +740,7 @@ static void initialize(int argc, char *argv[])
 
             case ENOMEM:
                 ERROR("couldn't parse application arguments (memory allocation error)");
+                perror("malloc()");
                 exit(STATION_APP_ERROR_MALLOC);
 
             case E2BIG:
@@ -1084,6 +1086,7 @@ static void initialize(int argc, char *argv[])
         if (application.plugin.vtable == NULL)
         {
             ERROR("couldn't obtain plugin vtable");
+            perror("dlsym()");
             exit(STATION_APP_ERROR_PLUGIN);
         }
 
@@ -1489,6 +1492,7 @@ static void initialize(int argc, char *argv[])
         if (application.file.streams == NULL)
         {
             ERROR("couldn't allocate array of file streams");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1507,6 +1511,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, application.args.file_arg[i]);
+                perror("fopen()");
                 exit(STATION_APP_ERROR_FILE);
             }
         }
@@ -1524,6 +1529,7 @@ static void initialize(int argc, char *argv[])
         if (application.shm_simple.ptrs == NULL)
         {
             ERROR("couldn't allocate array of pointers for simple shared memory");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1564,6 +1570,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
+                perror("ftok()");
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
@@ -1574,6 +1581,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
+                perror("shmget()");
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
@@ -1584,6 +1592,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
+                perror("shmat()");
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
@@ -1598,6 +1607,7 @@ static void initialize(int argc, char *argv[])
         if (application.shm_ptrs.ptrs == NULL)
         {
             ERROR("couldn't allocate array of pointers for shared memory with pointer support");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1611,6 +1621,7 @@ static void initialize(int argc, char *argv[])
         if (application.shm_ptrs.ptrs_data == NULL)
         {
             ERROR("couldn't allocate array of pointers for shared memory with pointer support");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1647,6 +1658,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
+                perror("ftok()");
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
@@ -1657,6 +1669,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
+                perror("shmget()");
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
@@ -1667,6 +1680,7 @@ static void initialize(int argc, char *argv[])
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
                         COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
+                perror("shmat()/shmdt()");
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
 
@@ -1688,6 +1702,7 @@ static void initialize(int argc, char *argv[])
         if (application.library.handles == NULL)
         {
             ERROR("couldn't allocate array of shared library handles");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -1704,8 +1719,8 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't open shared library ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET,
-                        (unsigned long)i, application.args.library_arg[i]);
+                        COLOR_STRING "%s" COLOR_RESET " (%s)",
+                        (unsigned long)i, application.args.library_arg[i], dlerror());
                 exit(STATION_APP_ERROR_LIBRARY);
             }
         }
@@ -1748,6 +1763,7 @@ static void initialize(int argc, char *argv[])
         if (application.concurrent_processing.contexts.contexts == NULL)
         {
             ERROR("couldn't allocate array of concurrent processing contexts");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -2315,6 +2331,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->file_arg == NULL)
                 {
                     ERROR("couldn't allocate array of file paths");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2325,6 +2342,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->shm_simple_arg == NULL)
                 {
                     ERROR("couldn't allocate array of simple shared memory paths");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2335,6 +2353,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->shm_ptrs_arg == NULL)
                 {
                     ERROR("couldn't allocate array of paths of shared memory with pointer support");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2345,6 +2364,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->library_arg == NULL)
                 {
                     ERROR("couldn't allocate array of library paths");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2355,6 +2375,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->threads_arg == NULL)
                 {
                     ERROR("couldn't allocate array of concurrent processing context arguments");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2365,6 +2386,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->cl_context_arg == NULL)
                 {
                     ERROR("couldn't allocate array of OpenCL context arguments");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2375,6 +2397,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->SIGRTMIN_arg == NULL)
                 {
                     ERROR("couldn't allocate array of real-time signal numbers SIGRTMIN+i");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2385,6 +2408,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
                 if (args->SIGRTMAX_arg == NULL)
                 {
                     ERROR("couldn't allocate array of real-time signal numbers SIGRTMAX-i");
+                    perror("malloc()");
                     return ENOMEM;
                 }
             }
@@ -2412,6 +2436,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
             if (errno != 0)
             {
                 ERROR_("couldn't parse number of threads from '%s'", arg);
+                perror("strtol()");
                 return EINVAL;
             }
             break;
@@ -2426,6 +2451,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
             if (errno != 0)
             {
                 ERROR_("couldn't parse real-time signal number SIGRTMIN+i from '%s'", arg);
+                perror("strtol()");
                 return EINVAL;
             }
             break;
@@ -2436,6 +2462,7 @@ static error_t args_parse_2(int key, char *arg, struct argp_state *state)
             if (errno != 0)
             {
                 ERROR_("couldn't parse real-time signal number SIGRTMAX-i from '%s'", arg);
+                perror("strtol()");
                 return EINVAL;
             }
             break;
@@ -2467,6 +2494,7 @@ static void display_opencl_listing(void)
     if (platform_list == NULL)
     {
         ERROR("couldn't allocate OpenCL platform list");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -2525,6 +2553,7 @@ static void display_opencl_listing(void)
                 if (new_device_list == NULL)
                 {
                     ERROR("couldn't allocate OpenCL device list");
+                    perror("realloc()");
                     free(platform_list);
                     free(device_list);
                     exit(STATION_APP_ERROR_MALLOC);
@@ -2588,6 +2617,7 @@ static void prepare_opencl_tmp_arrays(void)
     if (application.opencl.tmp.platform_list == NULL)
     {
         ERROR("couldn't allocate OpenCL platform list");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -2605,6 +2635,7 @@ static void prepare_opencl_tmp_arrays(void)
     if (application.opencl.tmp.num_devices == NULL)
     {
         ERROR("couldn't allocate list of numbers of OpenCL devices");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -2626,6 +2657,7 @@ static void prepare_opencl_tmp_arrays(void)
     if (application.opencl.tmp.device_list == NULL)
     {
         ERROR("couldn't allocate list of OpenCL device lists");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -2640,6 +2672,7 @@ static void prepare_opencl_tmp_arrays(void)
         {
             ERROR_("couldn't allocate OpenCL device list for platform #"
                     COLOR_NUMBER "%x" COLOR_RESET, platform_idx);
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
@@ -2663,6 +2696,7 @@ static void create_opencl_contexts(void)
     if (application.opencl.contexts.contexts == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platform contexts");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -2676,6 +2710,7 @@ static void create_opencl_contexts(void)
     if (application.opencl.contexts.context_info == NULL)
     {
         ERROR("couldn't allocate array of OpenCL platforms");
+        perror("malloc()");
         exit(STATION_APP_ERROR_MALLOC);
     }
 
@@ -2697,6 +2732,7 @@ static void create_opencl_contexts(void)
                     " is greater or equal to number of available platforms ("
                     COLOR_NUMBER "%u" COLOR_RESET ")",
                     platform_idx, application.opencl.tmp.num_platforms);
+            perror("strtoul()");
             exit(STATION_APP_ERROR_ARGUMENTS);
         }
 
@@ -2753,6 +2789,7 @@ static void create_opencl_contexts(void)
         if (application.opencl.contexts.context_info[i].device_ids == NULL)
         {
             ERROR("couldn't allocate array of OpenCL devices");
+            perror("malloc()");
             exit(STATION_APP_ERROR_MALLOC);
         }
 
