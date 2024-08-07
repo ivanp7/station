@@ -1505,7 +1505,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't open file ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, application.args.file_arg[i]);
                 exit(STATION_APP_ERROR_FILE);
             }
@@ -1562,7 +1562,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't generate key for simple shared memory segment ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
@@ -1572,7 +1572,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't get simple shared memory segment ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
@@ -1582,7 +1582,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't attach simple shared memory segment ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
@@ -1645,7 +1645,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't generate key for shared memory segment with pointer support ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
@@ -1655,7 +1655,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't get shared memory segment with pointer support ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
@@ -1665,7 +1665,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't attach shared memory segment with pointer support ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, arg);
                 exit(STATION_APP_ERROR_SHAREDMEM);
             }
@@ -1704,7 +1704,7 @@ static void initialize(int argc, char *argv[])
             {
                 ERROR_("couldn't open shared library ["
                         COLOR_NUMBER "%lu" COLOR_RESET "]: "
-                        COLOR_STRING "%s" COLOR_RESET "\n",
+                        COLOR_STRING "%s" COLOR_RESET,
                         (unsigned long)i, application.args.library_arg[i]);
                 exit(STATION_APP_ERROR_LIBRARY);
             }
