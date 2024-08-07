@@ -283,7 +283,7 @@ enum args_keys {
     ARGKEY_SIGNAL_LAST = ARGKEY_SIGRTMAX,
 };
 
-struct argp_option args_options[] = {
+static struct argp_option args_options[] = {
     {.name = "help", .key = ARGKEY_HELP, .doc = "Display this help list", .group = -1},
     {.name = "usage", .key = ARGKEY_USAGE, .doc = "Display a short usage message", .group = -1},
     {.name = "version", .key = ARGKEY_VERSION, .doc = "Display application version", .group = -1},
