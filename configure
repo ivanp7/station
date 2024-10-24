@@ -162,7 +162,7 @@ case "$CC" in
     clang) CFLAGS_DIAGNOSTICS="-fcolor-diagnostics" ;;
 esac
 
-CFLAGS="-march=native -pipe -std=c17 -Wall -Wextra -Wpedantic -pedantic-errors \
+CFLAGS="-march=native -pipe -std=c17 -Wall -Wextra -Wpedantic \
 -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition \
 -I${PROJECT_DIR}/${IDIR} \
 $CFLAGS_COMMON \
